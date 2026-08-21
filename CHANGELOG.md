@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### New Features
+
+- **Mela Export**: Added `mela` as a new Output Target. Mela has no server or API, so instead of uploading, Pick-a-Recipe writes a `.melarecipe` JSON file (with embedded base64 thumbnail) and the web UI offers it as a download from the completed-job card, the job page, and History. Added a configurable Mela output directory setting, a `mela_file_path` history column, download endpoint, and automatic file cleanup when a history entry is deleted.
+
 ## [1.4.0] - 2026-01-21
 
 ### New Features

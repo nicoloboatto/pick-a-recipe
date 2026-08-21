@@ -165,6 +165,15 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         except sqlite3.OperationalError:
             pass
 
+    history_columns = {
+        'mela_file_path': 'TEXT',
+    }
+    for col, typedef in history_columns.items():
+        try:
+            cursor.execute(f'ALTER TABLE recipe_history ADD COLUMN {col} {typedef}')
+        except sqlite3.OperationalError:
+            pass
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS push_subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -551,7 +560,8 @@ def create_history_entry(job_id: str, url: str, video_title: Optional[str],
                          recipe_name: Optional[str], recipe_data: Optional[Dict],
                          thumbnail_path: Optional[str], thumbnail_data: Optional[str],
                          status: str, error_message: Optional[str] = None,
-                         output_target: Optional[str] = None) -> Optional[int]:
+                         output_target: Optional[str] = None,
+                         mela_file_path: Optional[str] = None) -> Optional[int]:
     """Create a history entry for a completed/failed recipe extraction."""
     with get_db() as conn:
         cursor = conn.cursor()
@@ -559,10 +569,10 @@ def create_history_entry(job_id: str, url: str, video_title: Optional[str],
         cursor.execute('''
             INSERT INTO recipe_history
             (job_id, url, video_title, recipe_name, recipe_data, thumbnail_path,
-             thumbnail_data, status, error_message, output_target)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             thumbnail_data, status, error_message, output_target, mela_file_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (job_id, url, video_title, recipe_name, recipe_json, thumbnail_path,
-              thumbnail_data, status, error_message, output_target))
+              thumbnail_data, status, error_message, output_target, mela_file_path))
         conn.commit()
         return cursor.lastrowid
 
@@ -641,25 +651,44 @@ def get_history_count(status_filter: Optional[str] = None,
         return cursor.fetchone()[0]
 
 
+def _delete_mela_files(mela_file_paths: List[str]) -> None:
+    """Remove .melarecipe files backing history entries that are about to be deleted."""
+    for path in mela_file_paths:
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
 def delete_history_entry(history_id: int) -> bool:
-    """Delete a history entry."""
+    """Delete a history entry, cleaning up its .melarecipe file if it has one."""
     with get_db() as conn:
         cursor = conn.cursor()
+        cursor.execute('SELECT mela_file_path FROM recipe_history WHERE id = ?', (history_id,))
+        row = cursor.fetchone()
         cursor.execute('DELETE FROM recipe_history WHERE id = ?', (history_id,))
         conn.commit()
-        return cursor.rowcount > 0
+        deleted = cursor.rowcount > 0
+    if deleted and row:
+        _delete_mela_files([row['mela_file_path']])
+    return deleted
 
 
 def delete_history_entries_bulk(history_ids: List[int]) -> int:
-    """Delete multiple history entries. Returns count of deleted entries."""
+    """Delete multiple history entries, cleaning up any .melarecipe files. Returns count deleted."""
     if not history_ids:
         return 0
     with get_db() as conn:
         cursor = conn.cursor()
         placeholders = ','.join(['?' for _ in history_ids])
+        cursor.execute(f'SELECT mela_file_path FROM recipe_history WHERE id IN ({placeholders})', history_ids)
+        mela_paths = [row['mela_file_path'] for row in cursor.fetchall()]
         cursor.execute(f'DELETE FROM recipe_history WHERE id IN ({placeholders})', history_ids)
         conn.commit()
-        return cursor.rowcount
+        deleted_count = cursor.rowcount
+    _delete_mela_files(mela_paths)
+    return deleted_count
 
 
 def get_combined_history_and_jobs(limit: int = 50, offset: int = 0,
@@ -691,6 +720,7 @@ def get_combined_history_and_jobs(limit: int = 50, offset: int = 0,
                 rh.status,
                 rh.error_message,
                 rh.output_target,
+                rh.mela_file_path,
                 rh.created_at,
                 NULL as progress,
                 NULL as current_stage,
@@ -723,6 +753,7 @@ def get_combined_history_and_jobs(limit: int = 50, offset: int = 0,
                 rj.status,
                 rj.error_message,
                 NULL as output_target,
+                NULL as mela_file_path,
                 rj.created_at,
                 rj.progress,
                 rj.current_stage,

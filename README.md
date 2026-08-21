@@ -20,7 +20,7 @@ Pick-a-Recipe is a Python application that:
 2. **Transcribes audio** using Whisper AI (via `faster-whisper`)
 3. **Extracts on-screen text** (ingredients, instructions) using vision-capable LLMs
 4. **Generates structured recipes** using AI (OpenAI GPT or Google Gemini)
-5. **Uploads to recipe managers** - supports [Tandoor](https://tandoor.dev/) and [Mealie](https://mealie.io/)
+5. **Exports the recipe** - uploads to [Tandoor](https://tandoor.dev/) or [Mealie](https://mealie.io/), or saves a `.melarecipe` file for [Mela](https://mela.recipes/) (macOS/iOS)
 
 ### Features
 
@@ -40,7 +40,7 @@ Pick-a-Recipe is a Python application that:
 - Python 3.11+
 - FFmpeg (for video/audio processing)
 - API key for OpenAI or Google Gemini
-- Self-hosted Tandoor or Mealie instance (optional)
+- Self-hosted Tandoor or Mealie instance (optional — not needed if exporting to Mela)
 
 ## Installation
 
@@ -142,12 +142,17 @@ All configuration is managed through the web UI settings page (`/settings`). On 
 | **Recipe Language** | Target language for recipe output (e.g., `hebrew`, `english`) |
 | **Target Language Code** | ISO language code for transcription (e.g., `he`, `en`) |
 | **Whisper Model** | Whisper model size (`tiny`, `small`, `medium`, `large`) |
-| **Output Target** | Recipe manager: `tandoor` or `mealie` |
+| **Output Target** | Recipe manager: `tandoor`, `mealie`, or `mela` |
 | **Tandoor Host** | URL of your Tandoor instance |
 | **Tandoor API Key** | API token from Tandoor |
 | **Mealie Host** | URL of your Mealie instance |
 | **Mealie API Key** | API token from Mealie |
-| **Confirm Before Upload** | Show recipe preview before uploading |
+| **Mela Output Directory** | Where `.melarecipe` files are written (defaults to a folder inside the persistent data volume) |
+| **Confirm Before Upload** | Show recipe preview before uploading (or saving, for Mela) |
+
+### Exporting to Mela
+
+[Mela](https://mela.recipes/) is a macOS/iOS recipe app with no server or API — recipes are `.melarecipe` files you import directly into the app. When **Output Target** is set to `mela`, Pick-a-Recipe doesn't upload anywhere: it writes a `.melarecipe` file to the configured output directory and the web UI offers it as a download (from the completed-job card, the job page, or later from History). The file is also kept alongside its history entry so it can be re-downloaded at any time, and is cleaned up automatically when that history entry is deleted.
 
 ## Usage
 
@@ -158,8 +163,8 @@ All configuration is managed through the web UI settings page (`/settings`). On 
 3. Paste a video URL (TikTok, YouTube, Instagram, etc.)
 4. Click "Extract Recipe"
 5. Watch the real-time progress as the video is processed
-6. If "Confirm Before Upload" is enabled, review and optionally edit the recipe
-7. The recipe is automatically uploaded to your configured recipe manager
+6. If "Confirm Before Upload" is enabled, review the recipe and pick the dish photo
+7. The recipe is automatically uploaded to your configured recipe manager, or saved as a `.melarecipe` file if the target is Mela
 
 ### PWA / Mobile App (Share Links Directly)
 
@@ -202,6 +207,7 @@ pick-a-recipe/
 ├── image_extractor.py   # Dish image extraction
 ├── mealie.py            # Mealie API integration
 ├── tandoor.py           # Tandoor API integration
+├── mela.py              # Mela .melarecipe file export
 ├── recipe_exporter.py   # Recipe export utilities
 ├── helpers.py           # Utility functions and prompts
 ├── llm_providers/       # LLM provider implementations

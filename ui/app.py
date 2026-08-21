@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, make_response
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, make_response, send_file
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
 from database import (
@@ -519,6 +519,7 @@ def settings():
         config['mealie_host'] = request.form.get('mealie_host', '')
         config['tandoor_api_key'] = request.form.get('tandoor_api_key', '')
         config['tandoor_host'] = request.form.get('tandoor_host', '')
+        config['mela_output_dir'] = request.form.get('mela_output_dir', '')
         config['target_language'] = request.form.get('target_language', 'he')
         config['output_target'] = request.form.get('output_target', 'tandoor')
         config['export_to_both'] = 'true' if request.form.get('export_to_both') else 'false'
@@ -807,6 +808,23 @@ def _resolve_history_image(item):
             return tmp.name, True
     except OSError:
         return None, False
+
+
+@app.route('/api/history/<int:history_id>/mela-file', methods=['GET'])
+@api_login_required
+def download_mela_file(history_id):
+    """Download the .melarecipe file for a history entry."""
+    item = get_history_entry(history_id)
+    if not item:
+        return jsonify({'error': 'History entry not found'}), 404
+
+    file_path = item.get('mela_file_path')
+    if not file_path or not os.path.exists(file_path):
+        return jsonify({
+            'error': 'The .melarecipe file is no longer available (it may have been removed by a container rebuild or volume reset).'
+        }), 404
+
+    return send_file(file_path, as_attachment=True, download_name=os.path.basename(file_path))
 
 
 @app.route('/api/history/<int:history_id>/reupload', methods=['POST'])
@@ -1283,6 +1301,7 @@ def process_video_job(job_id, jm):
         result.image_path,
         result.output_target,
         llm_tokens=result.llm_tokens_estimate or stats.llm_tokens_estimate,
+        mela_file_path=result.mela_file_path,
     )
 
 

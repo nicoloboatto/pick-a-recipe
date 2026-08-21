@@ -63,6 +63,7 @@
                     <select id="output_target" name="output_target" class="form-select">
                         <option value="tandoor" {% if config.output_target == 'tandoor' %}selected{% endif %}>Tandoor</option>
                         <option value="mealie" {% if config.output_target == 'mealie' %}selected{% endif %}>Mealie</option>
+                        <option value="mela" {% if config.output_target == 'mela' %}selected{% endif %}>Mela</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -88,7 +89,7 @@
         </div>
         
         <!-- Mealie Settings -->
-        <div class="settings-section">
+        <div class="settings-section" id="mealie-settings-section">
             <h2><i class="fas fa-server"></i> Mealie</h2>
             
             <div class="form-row">
@@ -108,25 +109,39 @@
         </div>
         
         <!-- Tandoor Settings -->
-        <div class="settings-section">
+        <div class="settings-section" id="tandoor-settings-section">
             <h2><i class="fas fa-cloud"></i> Tandoor</h2>
-            
+
             <div class="form-row">
                 <div class="form-group">
                     <label for="tandoor_host">Tandoor URL</label>
-                    <input type="url" id="tandoor_host" name="tandoor_host" 
+                    <input type="url" id="tandoor_host" name="tandoor_host"
                            value="{{ config.tandoor_host }}" placeholder="https://tandoor.example.com"
                            autocomplete="off" autocapitalize="none" spellcheck="false">
                 </div>
                 <div class="form-group">
                     <label for="tandoor_api_key">Tandoor API Key</label>
-                    <input type="password" id="tandoor_api_key" name="tandoor_api_key" 
+                    <input type="password" id="tandoor_api_key" name="tandoor_api_key"
                            value="{{ config.tandoor_api_key }}" placeholder="Your Tandoor API key"
                            autocomplete="off" autocapitalize="none" spellcheck="false">
                 </div>
             </div>
         </div>
-        
+
+        <!-- Mela Settings -->
+        <div class="settings-section" id="mela-settings-section">
+            <h2><i class="fas fa-file-export"></i> Mela</h2>
+            <p class="section-description">Mela has no server or API — recipes are saved as <code>.melarecipe</code> files you download and open in the Mela app (macOS/iOS).</p>
+
+            <div class="form-group">
+                <label for="mela_output_dir">Output Directory</label>
+                <input type="text" id="mela_output_dir" name="mela_output_dir"
+                       value="{{ config.mela_output_dir }}" placeholder="/app/data/mela_exports"
+                       autocomplete="off" autocapitalize="none" spellcheck="false">
+                <small class="form-hint">Where .melarecipe files are written. Leave blank to use a default folder inside the persistent data volume.</small>
+            </div>
+        </div>
+
         <!-- Whisper Settings -->
         <div class="settings-section">
             <h2><i class="fas fa-microphone"></i> Whisper Transcription</h2>
@@ -223,7 +238,7 @@
                            {% if config.confirm_before_upload == 'true' %}checked{% endif %}>
                     <span class="checkbox-text">Confirm before uploading</span>
                 </label>
-                <small class="form-hint">When enabled, you'll see a preview of the recipe and must confirm before it's uploaded to Tandoor or Mealie.</small>
+                <small class="form-hint">When enabled, you'll see a preview of the recipe and must confirm before it's uploaded to Tandoor/Mealie, or saved as a Mela file.</small>
             </div>
         </div>
 
@@ -427,6 +442,19 @@ document.getElementById('cookies-file-upload').addEventListener('change', async 
     // Reset the file input
     e.target.value = '';
 });
+
+// Show only the settings section relevant to the selected output target
+// (export_to_both always needs both Tandoor and Mealie configured; Mela never does)
+function updateOutputTargetSections() {
+    const target = document.getElementById('output_target').value;
+    const both = document.getElementById('export_to_both').checked;
+    document.getElementById('mealie-settings-section').style.display = (target === 'mealie' || both) ? '' : 'none';
+    document.getElementById('tandoor-settings-section').style.display = (target === 'tandoor' || both) ? '' : 'none';
+    document.getElementById('mela-settings-section').style.display = (target === 'mela') ? '' : 'none';
+}
+document.getElementById('output_target').addEventListener('change', updateOutputTargetSections);
+document.getElementById('export_to_both').addEventListener('change', updateOutputTargetSections);
+updateOutputTargetSections();
 
 document.querySelectorAll('.delete-user-btn').forEach(btn => {
     btn.addEventListener('click', async function() {

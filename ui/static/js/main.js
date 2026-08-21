@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     socket.on('job_complete', function(data) {
-        handleJobComplete(data.job_id, data.recipe);
+        handleJobComplete(data.job_id, data.recipe, data.output_target, data.history_id);
     });
     
     socket.on('job_failed', function(data) {
@@ -393,15 +393,15 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Handle job completion
      */
-    function handleJobComplete(jobId, recipe) {
+    function handleJobComplete(jobId, recipe, outputTarget, historyId) {
         const job = activeJobs.get(jobId);
-        
+
         // Update card to completed state
         const card = document.querySelector(`.job-card[data-job-id="${jobId}"]`);
         if (card) {
             card.classList.add('completed');
             card.querySelector('.cancel-job-btn').style.display = 'none';
-            
+
             // Auto-remove after a few seconds
             setTimeout(() => {
                 card.classList.add('fade-out');
@@ -412,11 +412,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 }, 300);
             }, 3000);
         }
-        
+
         // Add to completed section
-        addCompletedCard(jobId, recipe);
-        
-        showNotification(`Recipe "${recipe.name || 'Untitled'}" created successfully!`, 'success');
+        addCompletedCard(jobId, recipe, outputTarget, historyId);
+
+        const isMela = (outputTarget || '').toLowerCase() === 'mela';
+        showNotification(
+            isMela
+                ? `Recipe "${recipe.name || 'Untitled'}" saved — download it below!`
+                : `Recipe "${recipe.name || 'Untitled'}" created successfully!`,
+            'success'
+        );
         if (window.PickARecipeNotifications) {
             PickARecipeNotifications.onJobComplete(recipe);
         }
@@ -490,14 +496,21 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Add completed recipe card
      */
-    function addCompletedCard(jobId, recipe) {
+    function addCompletedCard(jobId, recipe, outputTarget, historyId) {
         const template = completedCardTemplate.content.cloneNode(true);
         const card = template.querySelector('.completed-card');
-        
+
         card.dataset.jobId = jobId;
         card.querySelector('.completed-title').textContent = recipe.name || 'Untitled Recipe';
         card.querySelector('.view-history-btn').href = '/history';
-        
+
+        const downloadBtn = card.querySelector('.download-mela-btn');
+        if (downloadBtn && (outputTarget || '').toLowerCase() === 'mela' && historyId) {
+            downloadBtn.href = `/api/history/${historyId}/mela-file`;
+            downloadBtn.style.display = 'inline-flex';
+            card.querySelector('.completed-message').textContent = 'Saved as a .melarecipe file';
+        }
+
         completedRecipes.insertBefore(card, completedRecipes.firstChild);
         
         // Show result section
@@ -541,6 +554,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 previewTarget.textContent = data.output_target || 'recipe manager';
             }
         }
+
+        // Mela has no server to upload to — it's a file the user saves and opens in the app
+        const isMela = !data.export_to_both && (data.output_target || '').toLowerCase() === 'mela';
+        const previewAction = document.getElementById('preview-action');
+        if (previewAction) previewAction.textContent = isMela ? 'saving as' : 'uploading to';
+        const confirmIcon = document.getElementById('confirm-upload-icon');
+        const confirmLabel = document.getElementById('confirm-upload-label');
+        if (confirmIcon) confirmIcon.className = isMela ? 'fas fa-save' : 'fas fa-cloud-upload-alt';
+        if (confirmLabel) confirmLabel.textContent = isMela ? 'Save Recipe' : 'Confirm Upload';
         
         // Build image candidates grid
         if (imageCandidatesGrid && data.candidate_images && data.candidate_images.length > 0) {

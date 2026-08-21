@@ -31,7 +31,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
     socket.on('job_complete', (data) => {
         if (data.job_id !== jobId) return;
-        updateUI({ stage: 'complete', message: 'Completed!', percent: 100 });
+        const isMela = (data.output_target || '').toLowerCase() === 'mela';
+        updateUI({
+            stage: 'complete',
+            message: isMela ? 'Recipe saved — download it below!' : 'Completed!',
+            percent: 100,
+        });
+        if (isMela && data.history_id && cardEl) {
+            const link = document.createElement('a');
+            link.href = `/api/history/${data.history_id}/mela-file`;
+            link.className = 'btn btn-secondary';
+            link.style.marginTop = '0.75rem';
+            link.innerHTML = '<i class="fas fa-file-download"></i> Download .melarecipe';
+            cardEl.appendChild(link);
+        }
         if (window.PickARecipeNotifications) {
             PickARecipeNotifications.onJobComplete(data.recipe);
         }

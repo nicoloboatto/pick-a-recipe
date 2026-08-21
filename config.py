@@ -84,6 +84,7 @@ DEFAULT_CONFIG = {
     "mealie_host": "",
     "tandoor_api_key": "",
     "tandoor_host": "",
+    "mela_output_dir": "",
     "target_language": "he",
     "output_target": "tandoor",
     "export_to_both": "false",
@@ -210,6 +211,11 @@ class Config:
     @property
     def TANDOOR_HOST(self) -> str:
         return self._get('tandoor_host', DEFAULT_CONFIG['tandoor_host'])
+
+    @property
+    def MELA_OUTPUT_DIR(self) -> str:
+        configured = self._get('mela_output_dir', DEFAULT_CONFIG['mela_output_dir'])
+        return configured or os.path.join(DATA_DIR, 'mela_exports')
 
     @property
     def TARGET_LANGUAGE(self) -> str:

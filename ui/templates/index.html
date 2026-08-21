@@ -110,6 +110,9 @@
             <h4 class="completed-title">Recipe Name</h4>
             <p class="completed-message">Uploaded successfully!</p>
         </div>
+        <a href="#" class="btn btn-secondary download-mela-btn" style="display:none;">
+            <i class="fas fa-file-download"></i> Download
+        </a>
         <a href="#" class="btn btn-secondary view-history-btn">View</a>
     </div>
 </template>
@@ -121,7 +124,7 @@
     <div class="modal-container">
         <div class="modal-header">
             <h2><i class="fas fa-eye"></i> Recipe Preview</h2>
-            <p class="modal-subtitle">Review before uploading to <span id="preview-target"></span></p>
+            <p class="modal-subtitle">Review before <span id="preview-action">uploading to</span> <span id="preview-target"></span></p>
         </div>
         
         <div class="modal-body">
@@ -158,8 +161,8 @@
                 Cancel
             </button>
             <button id="confirm-upload-btn" class="btn btn-primary">
-                <i class="fas fa-cloud-upload-alt"></i>
-                Confirm Upload
+                <i class="fas fa-cloud-upload-alt" id="confirm-upload-icon"></i>
+                <span id="confirm-upload-label">Confirm Upload</span>
             </button>
         </div>
     </div>

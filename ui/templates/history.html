@@ -107,6 +107,9 @@
             <button id="delete-recipe-btn" class="btn btn-danger">
                 <i class="fas fa-trash"></i> Delete
             </button>
+            <a id="download-mela-btn" class="btn btn-primary" href="#" style="display:none;">
+                <i class="fas fa-file-download"></i> Download .melarecipe
+            </a>
             <div class="reupload-dropdown">
                 <button id="reupload-recipe-btn" class="btn btn-primary">
                     <i class="fas fa-cloud-upload-alt"></i> Re-upload
@@ -206,6 +209,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const deleteBtn = document.getElementById('delete-recipe-btn');
     const reuploadBtn = document.getElementById('reupload-recipe-btn');
     const reuploadMenu = document.getElementById('reupload-menu');
+    const downloadMelaBtn = document.getElementById('download-mela-btn');
     const confirmDeleteModal = document.getElementById('confirm-delete-modal');
     const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
     const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
@@ -498,11 +502,15 @@ document.addEventListener('DOMContentLoaded', function() {
                             <i class="fas fa-eye"></i>
                         </button>
                     ` : ''}
-                    ${item.status === 'success' && item.source_type === 'history' ? `
-                        <button class="btn btn-icon reupload-quick-btn" title="Re-upload">
-                            <i class="fas fa-cloud-upload-alt"></i>
-                        </button>
-                    ` : ''}
+                    ${item.status === 'success' && item.source_type === 'history' ? (
+                        item.output_target === 'mela'
+                            ? `<a class="btn btn-icon" href="/api/history/${historyId}/mela-file" title="Download .melarecipe">
+                                   <i class="fas fa-file-download"></i>
+                               </a>`
+                            : `<button class="btn btn-icon reupload-quick-btn" title="Re-upload">
+                                   <i class="fas fa-cloud-upload-alt"></i>
+                               </button>`
+                    ) : ''}
                     ${item.status === 'failed' || item.status === 'cancelled' ? `
                         <button class="btn btn-icon retry-btn" title="Retry">
                             <i class="fas fa-redo"></i>
@@ -683,11 +691,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 instructionsSection.style.display = 'none';
             }
             
-            // Show/hide reupload button based on status
-            if (item.status === 'success' && item.recipe_data) {
+            // Mela recipes have no server to re-upload to — offer a re-download instead
+            if (item.status === 'success' && item.output_target === 'mela') {
+                downloadMelaBtn.href = `/api/history/${historyId}/mela-file`;
+                downloadMelaBtn.style.display = 'inline-flex';
+                reuploadBtn.style.display = 'none';
+            } else if (item.status === 'success' && item.recipe_data) {
                 reuploadBtn.style.display = 'inline-flex';
+                downloadMelaBtn.style.display = 'none';
             } else {
                 reuploadBtn.style.display = 'none';
+                downloadMelaBtn.style.display = 'none';
             }
             
             recipeModal.style.display = 'flex';

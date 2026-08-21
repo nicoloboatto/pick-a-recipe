@@ -208,6 +208,7 @@ class JobManager:
         image_path: Optional[str],
         output_target: str,
         llm_tokens: int = 0,
+        mela_file_path: Optional[str] = None,
     ) -> None:
         job = get_job(job_id)
         if not job:
@@ -224,7 +225,7 @@ class JobManager:
             except Exception:
                 pass
 
-        create_history_entry(
+        history_id = create_history_entry(
             job_id=job_id,
             url=job['url'],
             video_title=job.get('video_title'),
@@ -234,6 +235,7 @@ class JobManager:
             thumbnail_data=thumbnail_data,
             status='success',
             output_target=output_target,
+            mela_file_path=mela_file_path,
         )
         db_complete_job(job_id)
 
@@ -241,6 +243,8 @@ class JobManager:
             'job_id': job_id,
             'recipe': recipe_data,
             'llm_tokens_used': llm_tokens,
+            'output_target': output_target,
+            'history_id': history_id,
         }
         self.socketio.emit('job_complete', payload, room=f'job_{job_id}')
         self.socketio.emit('job_complete', payload)

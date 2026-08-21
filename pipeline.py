@@ -28,6 +28,7 @@ class PipelineResult:
     recipe_data: dict | None = None
     image_path: str | None = None
     output_target: str = ""
+    mela_file_path: str | None = None
     llm_tokens_estimate: int = 0
     error: str | None = None
 
@@ -189,6 +190,9 @@ def run_extraction_pipeline(
         if reporter.is_cancelled():
             return PipelineResult(error="cancelled")
 
+        is_mela_only = config.OUTPUT_TARGET == "mela" and not config.EXPORT_TO_BOTH
+        upload_message = "Saving Mela recipe file..." if is_mela_only else f"Uploading to {config.OUTPUT_TARGET}..."
+
         if config.CONFIRM_BEFORE_UPLOAD and preview is not None:
             selected_idx = _handle_preview_confirmation(preview, recipe_data, image_path,
                                                         image_candidates, best_image_index, reporter)
@@ -196,9 +200,9 @@ def run_extraction_pipeline(
                 return PipelineResult(error="cancelled", llm_tokens_estimate=stats.llm_tokens_estimate)
             if image_candidates and 0 <= selected_idx < len(image_candidates):
                 image_path = image_candidates[selected_idx]
-            reporter.update("upload", f"Uploading to {config.OUTPUT_TARGET}...", 95)
+            reporter.update("upload", upload_message, 95)
         else:
-            reporter.update("upload", f"Uploading to {config.OUTPUT_TARGET}...", 95)
+            reporter.update("upload", upload_message, 95)
 
         if reporter.is_cancelled():
             return PipelineResult(error="cancelled", recipe_data=recipe_data, image_path=image_path,
@@ -218,6 +222,7 @@ def run_extraction_pipeline(
             reporter.update("upload", "Uploading to Tandoor and Mealie...", 95)
 
         upload_results = []
+        mela_file_path = None
         for target in upload_targets:
             try:
                 if target == "tandoor":
@@ -234,6 +239,12 @@ def run_extraction_pipeline(
                     recipe_slug = result.get("slug") or result.get("id")
                     if image_path and recipe_slug:
                         mealie.upload_image(recipe_slug, image_path)
+                    upload_results.append((target, True, None))
+                elif target == "mela":
+                    from mela import Mela
+                    mela = Mela()
+                    result = mela.create_recipe(recipe_data, image_path)
+                    mela_file_path = result.get("file_path")
                     upload_results.append((target, True, None))
             except Exception as upload_error:
                 upload_results.append((target, False, str(upload_error)))
@@ -254,12 +265,15 @@ def run_extraction_pipeline(
                 f"Uploaded to {final_target}. Failed: {failed_msgs}",
                 100,
             )
+        elif is_mela_only:
+            reporter.update("complete", "Recipe saved as a Mela file!", 100)
         else:
             reporter.update("complete", f"Recipe uploaded successfully to {final_target}!", 100)
         return PipelineResult(
             recipe_data=recipe_data,
             image_path=image_path,
             output_target=final_target,
+            mela_file_path=mela_file_path,
             llm_tokens_estimate=stats.llm_tokens_estimate,
         )
 
