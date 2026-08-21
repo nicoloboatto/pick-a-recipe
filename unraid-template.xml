@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>pick-a-recipe</Name>
+  <Repository>ghcr.io/REPLACE_WITH_YOUR_GITHUB_USERNAME/pick-a-recipe:latest</Repository>
+  <Registry>https://ghcr.io/</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/REPLACE_WITH_YOUR_GITHUB_USERNAME/pick-a-recipe</Support>
+  <Overview>Extract recipes from TikTok/YouTube/Instagram videos with AI and export them to Tandoor, Mealie, or a Mela .melarecipe file. Built from your own fork's GitHub Actions image (see UNRAID.md in the repo).</Overview>
+  <Category>MediaApp: Other</Category>
+  <WebUI>http://[IP]:[PORT:5006]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/REPLACE_WITH_YOUR_GITHUB_USERNAME/pick-a-recipe/main/ui/static/icons/icon-192x192.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI Port" Target="5006" Default="5006" Mode="tcp" Description="Port the Flask web UI listens on" Type="Port" Display="always" Required="true" Mask="false">5006</Config>
+  <Config Name="App Data" Target="/app/data" Default="/mnt/user/appdata/pick-a-recipe" Mode="rw" Description="Persistent data: SQLite database, cookies, Mela exports" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/pick-a-recipe</Config>
+  <Config Name="Temp/Working Dir" Target="/tmp" Default="/mnt/user/appdata/pick-a-recipe/tmp" Mode="rw" Description="Scratch space for in-progress downloads/transcriptions" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/pick-a-recipe/tmp</Config>
+  <Config Name="FLASK_SECRET_KEY" Target="FLASK_SECRET_KEY" Default="" Mode="" Description="Random secret for session cookies — generate with: openssl rand -hex 32" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="MAX_CONCURRENT_JOBS" Target="MAX_CONCURRENT_JOBS" Default="3" Mode="" Description="How many video extraction jobs run in parallel (1-16)" Type="Variable" Display="always" Required="false" Mask="false">3</Config>
+  <Config Name="TRUST_PROXY" Target="TRUST_PROXY" Default="true" Mode="" Description="Set to false if not running behind a reverse proxy" Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+  <Config Name="SESSION_COOKIE_SECURE" Target="SESSION_COOKIE_SECURE" Default="false" Mode="" Description="Set to true only when served over HTTPS" Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+</Container>

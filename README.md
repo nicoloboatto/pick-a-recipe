@@ -44,6 +44,10 @@ Pick-a-Recipe is a Python application that:
 
 ## Installation
 
+> **Running your own fork on Unraid?** See [UNRAID.md](UNRAID.md) for the
+> GitHub Actions → GHCR → Unraid Docker manager setup, including a ready-made
+> `unraid-template.xml`.
+
 ### Using Docker (Recommended)
 
 **Option 1: Pull from Docker Hub (Easiest)**
