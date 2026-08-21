@@ -6,7 +6,9 @@ Uses SQLite to store configuration, user data, jobs, and recipe history.
 import os
 import json
 import sqlite3
+import hashlib
 import uuid
+import bcrypt
 from datetime import datetime
 from contextlib import contextmanager
 from typing import Optional, List, Dict, Any
@@ -35,21 +37,28 @@ def init_db():
     """Initialize the database with required tables."""
     with get_db() as conn:
         cursor = conn.cursor()
-        
-        # Create users table
+
+        # Create users table. Supports both local username/password accounts
+        # and accounts provisioned via Authentik OIDC SSO (optional) side by
+        # side: local accounts have a real password_hash and auth_provider
+        # 'local'; SSO accounts are keyed by oidc_sub with password_hash left
+        # as '' and auth_provider 'authentik'.
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
-                oidc_sub TEXT UNIQUE,
+                password_hash TEXT NOT NULL DEFAULT '',
+                oidc_sub TEXT,
                 email TEXT,
                 name TEXT,
                 avatar_url TEXT,
+                auth_provider TEXT DEFAULT 'local',
+                must_change_password INTEGER DEFAULT 0,
                 is_admin INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
+
         # Create config table (key-value store)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS config (
@@ -58,7 +67,7 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
+
         # Create recipe_jobs table for tracking active analysis jobs
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS recipe_jobs (
@@ -74,7 +83,7 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
+
         # Create pending_uploads table for recipe confirmations
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS pending_uploads (
@@ -92,7 +101,7 @@ def init_db():
                 FOREIGN KEY (job_id) REFERENCES recipe_jobs(id)
             )
         ''')
-        
+
         # Create recipe_history table for completed recipes
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS recipe_history (
@@ -111,10 +120,17 @@ def init_db():
                 FOREIGN KEY (job_id) REFERENCES recipe_jobs(id)
             )
         ''')
-        
+
         conn.commit()
 
         _migrate_schema(conn)
+
+        # Create default admin user if no users exist. Covers both a brand
+        # new install and recovering a DB that an earlier OIDC-only build
+        # left with an empty users table (see _migrate_schema).
+        cursor.execute('SELECT COUNT(*) FROM users')
+        if cursor.fetchone()[0] == 0:
+            create_user('admin', 'admin123', must_change_password=True, is_admin=True)
 
         # Initialize default config values if not exist
         cursor.execute('SELECT COUNT(*) FROM config')
@@ -137,15 +153,24 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     """Apply incremental schema migrations for existing databases."""
     cursor = conn.cursor()
 
-    # Legacy local-auth schema detected: rebuild the users table for OIDC-only
-    # auth. Previously created local/Google accounts are discarded (fresh
-    # start); job history and configuration are preserved.
-    cursor.execute('PRAGMA table_info(users)')
-    columns = {row[1] for row in cursor.fetchall()}
-    if columns and 'password_hash' in columns:
-        print('[DB] Rebuilding users table for OIDC-only auth (legacy local accounts removed)')
-        cursor.execute('DROP TABLE users')
-        conn.commit()
+    # Additive only. In particular, an install that ran an earlier build
+    # where the users table was OIDC-only (no password_hash) gets local
+    # login back by adding the column rather than losing data.
+    user_columns = {
+        'password_hash': "TEXT NOT NULL DEFAULT ''",
+        'oidc_sub': 'TEXT',
+        'email': 'TEXT',
+        'name': 'TEXT',
+        'avatar_url': 'TEXT',
+        'auth_provider': "TEXT DEFAULT 'local'",
+        'must_change_password': 'INTEGER DEFAULT 0',
+        'is_admin': 'INTEGER DEFAULT 0',
+    }
+    for col, typedef in user_columns.items():
+        try:
+            cursor.execute(f'ALTER TABLE users ADD COLUMN {col} {typedef}')
+        except sqlite3.OperationalError:
+            pass
 
     job_columns = {
         'retry_from_history_id': 'INTEGER',
@@ -180,8 +205,149 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
 
     conn.commit()
 
+    cursor.execute("UPDATE users SET is_admin = 1 WHERE username = 'admin' AND is_admin = 0")
+    conn.commit()
+
+
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt."""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+
+def _verify_password_hash(stored_hash: str, password: str) -> bool:
+    """Verify password against bcrypt or legacy SHA-256 hash."""
+    if stored_hash.startswith('$2'):
+        return bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
+    return stored_hash == hashlib.sha256(password.encode()).hexdigest()
+
+
+def _upgrade_password_hash(username: str, password: str) -> None:
+    """Upgrade legacy SHA-256 hash to bcrypt on successful login."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE users SET password_hash = ? WHERE username = ?',
+            (hash_password(password), username),
+        )
+        conn.commit()
+
 
 # ===== User Functions =====
+
+def create_user(
+    username: str,
+    password: str | None = None,
+    *,
+    email: str | None = None,
+    auth_provider: str = 'local',
+    must_change_password: bool = False,
+    is_admin: bool = False,
+    avatar_url: str | None = None,
+) -> bool:
+    """Create a new local user."""
+    pw_hash = hash_password(password) if password else ''
+    try:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                '''INSERT INTO users
+                   (username, password_hash, email, auth_provider,
+                    must_change_password, is_admin, avatar_url)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                (username, pw_hash, email, auth_provider,
+                 int(must_change_password), int(is_admin), avatar_url),
+            )
+            conn.commit()
+            return True
+    except sqlite3.IntegrityError:
+        return False
+
+
+def get_user(username: str) -> Optional[Dict[str, Any]]:
+    """Get user record by username."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM users WHERE email = ?', (email,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_user_by_sub(sub: str) -> Optional[Dict[str, Any]]:
+    """Get user record by OIDC subject claim."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM users WHERE oidc_sub = ?', (sub,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def list_users() -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT id, username, email, auth_provider, is_admin, created_at FROM users ORDER BY username'
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def delete_user(username: str) -> bool:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM users WHERE username = ?', (username,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def user_must_change_password(username: str) -> bool:
+    user = get_user(username)
+    return bool(user and user.get('must_change_password'))
+
+
+def clear_must_change_password(username: str) -> None:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE users SET must_change_password = 0 WHERE username = ?',
+            (username,),
+        )
+        conn.commit()
+
+
+def verify_user(username: str, password: str) -> bool:
+    """Verify local username/password credentials."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT password_hash FROM users WHERE username = ?',
+            (username,)
+        )
+        row = cursor.fetchone()
+        if row and row['password_hash'] and _verify_password_hash(row['password_hash'], password):
+            if not row['password_hash'].startswith('$2'):
+                _upgrade_password_hash(username, password)
+            return True
+        return False
+
+
+def update_password(username: str, new_password: str) -> bool:
+    """Update user password."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE users SET password_hash = ? WHERE username = ?',
+            (hash_password(new_password), username)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
 
 def upsert_oidc_user(
     sub: str,
@@ -192,23 +358,31 @@ def upsert_oidc_user(
     avatar_url: Optional[str] = None,
     is_admin: bool = False,
 ) -> Dict[str, Any]:
-    """Create or refresh the local cache record for an OIDC (Authentik) user.
+    """Create or refresh the local record for an Authentik (OIDC) sign-in.
 
-    Users are identified by their stable OIDC subject (`sub`). On first login a
-    unique username is derived from preferred_username/email; if taken by a
-    different subject, a numeric suffix is appended. Admin flag mirrors group
-    membership at login time.
+    This is purely additive to local username/password auth: matches an
+    existing account by oidc_sub first, then by email (linking an existing
+    local account rather than creating a duplicate), and only creates a new
+    account — with no local password — if neither matches. Admin flag mirrors
+    Authentik group membership at login time.
     """
     with get_db() as conn:
         cursor = conn.cursor()
+
         cursor.execute('SELECT * FROM users WHERE oidc_sub = ?', (sub,))
         row = cursor.fetchone()
+
+        if not row and email:
+            cursor.execute('SELECT * FROM users WHERE email = ?', (email,))
+            row = cursor.fetchone()
+
         if row:
             cursor.execute(
                 '''UPDATE users
-                   SET email = ?, name = ?, avatar_url = ?, is_admin = ?
+                   SET oidc_sub = ?, email = ?, name = ?, avatar_url = ?,
+                       auth_provider = 'authentik', is_admin = ?
                    WHERE id = ?''',
-                (email, name, avatar_url, int(is_admin), row['id']),
+                (sub, email, name, avatar_url, int(is_admin), row['id']),
             )
             conn.commit()
             return get_user(row['username'])
@@ -223,30 +397,13 @@ def upsert_oidc_user(
             n += 1
 
         cursor.execute(
-            '''INSERT INTO users (username, oidc_sub, email, name, avatar_url, is_admin)
-               VALUES (?, ?, ?, ?, ?, ?)''',
+            '''INSERT INTO users
+               (username, oidc_sub, email, name, avatar_url, auth_provider, is_admin)
+               VALUES (?, ?, ?, ?, ?, 'authentik', ?)''',
             (final_username, sub, email, name, avatar_url, int(is_admin)),
         )
         conn.commit()
         return get_user(final_username)
-
-
-def get_user(username: str) -> Optional[Dict[str, Any]]:
-    """Get user record by username."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
-
-
-def get_user_by_sub(sub: str) -> Optional[Dict[str, Any]]:
-    """Get user record by OIDC subject claim."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE oidc_sub = ?', (sub,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
 
 
 # ===== Config Functions =====

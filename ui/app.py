@@ -20,7 +20,10 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 
 from database import (
     init_db, load_config, save_config,
-    get_user, upsert_oidc_user,
+    verify_user, update_password, hash_password,
+    get_user, get_user_by_email, upsert_oidc_user,
+    create_user, list_users, delete_user,
+    user_must_change_password, clear_must_change_password,
     get_history, get_history_entry, get_history_count, delete_history_entry,
     delete_history_entries_bulk, delete_job_entry, delete_jobs_bulk,
     get_combined_history_and_jobs, get_combined_history_and_jobs_count,
@@ -139,10 +142,12 @@ except Exception as _health_exc:  # never let health checks block startup
 # Initialize job manager (process func registered after definition below)
 job_manager = init_job_manager(socketio)
 
-# ===== Authentication via Authentik (OIDC) =====
-# Single sign-on through the self-hosted Authentik instance at auth.pickel.me.
-# Access requires membership in AUTHENTIK_USER_GROUP (admins additionally in
-# AUTHENTIK_ADMIN_GROUP). In Authentik, add the "authentik read groups" scope
+# Authentik OIDC SSO — optional, alongside local username/password login.
+# Local login always works; when AUTHENTIK_CLIENT_ID/SECRET are set, users can
+# also sign in via Authentik. Access still requires membership in
+# AUTHENTIK_USER_GROUP (admins additionally in AUTHENTIK_ADMIN_GROUP); a new
+# account is only auto-created for a first-time SSO sign-in when Allow
+# Registration is enabled in Settings. Add the "authentik read groups" scope
 # mapping to the provider so the `groups` claim is included in tokens.
 AUTHENTIK_ISSUER_URL = os.environ.get(
     'AUTHENTIK_ISSUER_URL',
@@ -162,9 +167,6 @@ if os.environ.get('AUTHENTIK_CLIENT_ID') and os.environ.get('AUTHENTIK_CLIENT_SE
         server_metadata_url=f'{AUTHENTIK_ISSUER_URL}/.well-known/openid-configuration',
         client_kwargs={'scope': 'openid email profile groups'},
     )
-else:
-    print('[Auth] WARNING: AUTHENTIK_CLIENT_ID / AUTHENTIK_CLIENT_SECRET are not set — '
-          'sign-in is disabled until Authentik OIDC credentials are configured.')
 
 # Store pending recipe uploads waiting for confirmation
 pending_uploads = {}
@@ -174,8 +176,14 @@ def _is_logged_in() -> bool:
     return 'user' in session
 
 
-def _current_user_is_admin() -> bool:
-    return bool(session.get('is_admin'))
+def _maybe_disable_registration_after_setup(username: str) -> None:
+    """After first real login (non-default password), suggest locking registrations."""
+    cfg = load_config()
+    if cfg.get('allow_registration', 'true') == 'true':
+        user = get_user(username)
+        if user and not user.get('must_change_password'):
+            # Leave enabled but admin can disable in settings
+            pass
 
 
 def login_required(f):
@@ -184,6 +192,9 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         if not _is_logged_in():
             return redirect(url_for('login'))
+        if user_must_change_password(session['user']):
+            if request.endpoint not in ('setup_password', 'logout', 'static'):
+                return redirect(url_for('setup_password'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -194,6 +205,8 @@ def api_login_required(f):
     def decorated_function(*args, **kwargs):
         if not _is_logged_in():
             return jsonify({'error': 'Authentication required'}), 401
+        if user_must_change_password(session['user']):
+            return jsonify({'error': 'Password change required', 'redirect': '/setup-password'}), 403
         return f(*args, **kwargs)
     return decorated_function
 
@@ -337,19 +350,90 @@ def share():
     session['auto_start_extraction'] = True
     
     # If user is not logged in, redirect to login (URL is preserved in session)
-    if not _is_logged_in():
+    if 'user' not in session:
         return redirect(url_for('login'))
     
     # User is logged in, redirect to main page
     return redirect(url_for('index'))
 
 
-@app.route('/login')
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page — single sign-on via Authentik."""
+    """Login page."""
     if _is_logged_in():
+        if user_must_change_password(session['user']):
+            return redirect(url_for('setup_password'))
         return redirect(url_for('index'))
-    return render_template('login.html', sso_enabled=oauth is not None)
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        remember_me = request.form.get('remember_me') == 'on'
+
+        if verify_user(username, password):
+            session['user'] = username
+            if remember_me:
+                session.permanent = True
+            if user_must_change_password(username):
+                flash('Please set a new password before continuing.', 'warning')
+                return redirect(url_for('setup_password'))
+            _maybe_disable_registration_after_setup(username)
+            flash('Login successful!', 'success')
+            return redirect(url_for('index'))
+        flash('Invalid username or password', 'error')
+
+    sso_enabled = oauth is not None
+    return render_template('login.html', sso_enabled=sso_enabled)
+
+
+@app.route('/setup-password', methods=['GET', 'POST'])
+def setup_password():
+    """Force password change for default or flagged accounts."""
+    if not _is_logged_in():
+        return redirect(url_for('login'))
+
+    username = session['user']
+    user = get_user(username)
+    if not user:
+        return redirect(url_for('logout'))
+
+    if request.method == 'POST':
+        new_password = request.form.get('new_password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        current_password = request.form.get('current_password', '')
+
+        if user.get('auth_provider') != 'local' and not user.get('password_hash'):
+            if new_password != confirm_password:
+                flash('Passwords do not match', 'error')
+            elif len(new_password) < 8:
+                flash('Password must be at least 8 characters', 'error')
+            else:
+                update_password(username, new_password)
+                clear_must_change_password(username)
+                flash('Password set successfully!', 'success')
+                return redirect(url_for('index'))
+        elif not verify_user(username, current_password) and user_must_change_password(username):
+            # Default admin first login — current password optional if still default
+            if username == 'admin' and current_password in ('', 'admin123'):
+                pass
+            elif not verify_user(username, current_password):
+                flash('Current password is incorrect', 'error')
+                return render_template('setup_password.html', user=user)
+
+        if new_password != confirm_password:
+            flash('Passwords do not match', 'error')
+        elif len(new_password) < 8:
+            flash('Password must be at least 8 characters', 'error')
+        else:
+            update_password(username, new_password)
+            clear_must_change_password(username)
+            cfg = load_config()
+            if cfg.get('allow_registration', 'true') == 'true':
+                save_config({**cfg, 'allow_registration': 'false'})
+            flash('Password updated! New registrations are now disabled.', 'success')
+            return redirect(url_for('index'))
+
+    return render_template('setup_password.html', user=user)
 
 
 def _authentik_redirect_uri() -> str:
@@ -368,7 +452,7 @@ def auth_login():
     """Redirect the user to Authentik for authentication."""
     if oauth is None:
         flash('Single sign-on is not configured. Set AUTHENTIK_CLIENT_ID and '
-              'AUTHENTIK_CLIENT_SECRET to enable sign-in.', 'error')
+              'AUTHENTIK_CLIENT_SECRET to enable it.', 'error')
         return redirect(url_for('login'))
     return oauth.authentik.authorize_redirect(_authentik_redirect_uri())
 
@@ -386,72 +470,57 @@ def auth_callback():
 
     try:
         token = oauth.authentik.authorize_access_token()
+        userinfo = token.get('userinfo') or oauth.authentik.parse_id_token(token)
     except Exception as exc:
         print(f"[Auth] token exchange failed: {exc}")
         flash('Sign-in failed. Please try again.', 'error')
         return redirect(url_for('login'))
 
-    userinfo = token.get('userinfo') or oauth.authentik.parse_id_token(token)
     sub = userinfo.get('sub')
     if not sub:
         flash('Sign-in failed: identity provider did not provide a subject claim.', 'error')
         return redirect(url_for('login'))
 
+    email = userinfo.get('email')
+    name = userinfo.get('name') or (email.split('@')[0] if email else 'user')
+    avatar = userinfo.get('picture')
     groups = set(userinfo.get('groups') or [])
     is_admin = AUTHENTIK_ADMIN_GROUP in groups
-    if not is_admin and AUTHENTIK_USER_GROUP not in groups:
-        print(f"[Auth] denied login for sub={sub}: groups={sorted(groups)}")
+    is_known_user = get_user_by_email(email) is not None if email else False
+
+    if not (is_admin or AUTHENTIK_USER_GROUP in groups):
         flash('Your account is not authorized to use Pick-a-Recipe. Ask an '
               'administrator to add you to the appropriate group in Authentik.', 'error')
         return redirect(url_for('login'))
 
-    username = (
-        userinfo.get('preferred_username')
-        or (userinfo.get('email') or '').split('@')[0]
-        or sub
-    )
+    cfg = load_config()
+    if not is_known_user and cfg.get('allow_registration', 'true') != 'true':
+        flash('Registration is disabled. Contact the administrator.', 'error')
+        return redirect(url_for('login'))
 
-    pending_shared_url = session.get('shared_url')
-    pending_auto_start = session.get('auto_start_extraction')
-
+    username = (userinfo.get('preferred_username') or (name.replace(' ', '_').lower() if name else sub))[:32]
     user = upsert_oidc_user(
         sub=sub,
         username=username,
-        email=userinfo.get('email'),
+        email=email,
         name=userinfo.get('name'),
-        avatar_url=userinfo.get('picture'),
+        avatar_url=avatar,
         is_admin=is_admin,
     )
 
-    session.clear()
     session['user'] = user['username']
-    session['is_admin'] = is_admin
     session.permanent = True
-
-    if pending_shared_url:
-        session['shared_url'] = pending_shared_url
-    if pending_auto_start:
-        session['auto_start_extraction'] = True
-
+    if user_must_change_password(user['username']):
+        return redirect(url_for('setup_password'))
     flash(f"Welcome, {user.get('name') or user['username']}!", 'success')
     return redirect(url_for('index'))
 
 
 @app.route('/logout')
 def logout():
-    """Log out: clear the local session and end the Authentik session."""
+    """Logout and clear session."""
     session.pop('user', None)
-    session.pop('is_admin', None)
-
-    end_session_url = None
-    if oauth is not None:
-        try:
-            end_session_url = oauth.authentik.load_server_metadata().get('end_session_endpoint')
-        except Exception as exc:
-            print(f"[Auth] could not load OIDC metadata for logout: {exc}")
-
-    if end_session_url:
-        return redirect(end_session_url)
+    flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
 
 
@@ -485,17 +554,45 @@ def settings():
         config['confirm_before_upload'] = 'true' if request.form.get(
             'confirm_before_upload') else 'false'
         config['max_concurrent_jobs'] = request.form.get('max_concurrent_jobs', '3')
+        config['allow_registration'] = 'true' if request.form.get('allow_registration') else 'false'
 
         save_config(config)
         get_job_manager().refresh_concurrency()
         flash('Settings saved successfully!', 'success')
         return redirect(url_for('settings'))
 
+    users = list_users() if (get_user(session.get('user')) or {}).get('is_admin') else []
     return render_template(
         'settings.html',
         config=config,
+        users=users,
+        sso_configured=oauth is not None,
         max_concurrent=resolve_max_concurrent(),
     )
+
+
+@app.route('/change-password', methods=['POST'])
+@login_required
+def change_password():
+    """Change user password."""
+    current_password = request.form.get('current_password', '')
+    new_password = request.form.get('new_password', '')
+    confirm_password = request.form.get('confirm_password', '')
+
+    username = session['user']
+
+    if not verify_user(username, current_password):
+        flash('Current password is incorrect', 'error')
+    elif new_password != confirm_password:
+        flash('New passwords do not match', 'error')
+    elif len(new_password) < 6:
+        flash('Password must be at least 6 characters', 'error')
+    else:
+        update_password(username, new_password)
+        clear_must_change_password(username)
+        flash('Password changed successfully!', 'success')
+
+    return redirect(url_for('settings'))
 
 
 # ===== Job API Endpoints =====
@@ -1123,6 +1220,19 @@ def push_unsubscribe():
     if endpoint:
         delete_push_subscription(endpoint)
     return jsonify({'status': 'unsubscribed'})
+
+
+@app.route('/api/users/<username>', methods=['DELETE'])
+@api_login_required
+def delete_user_api(username):
+    me = get_user(session['user'])
+    if not me or not me.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    if username == session['user']:
+        return jsonify({'error': 'Cannot delete yourself'}), 400
+    if delete_user(username):
+        return jsonify({'status': 'deleted'})
+    return jsonify({'error': 'User not found'}), 404
 
 
 @app.route('/api/process', methods=['POST'])
