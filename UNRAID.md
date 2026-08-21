@@ -7,7 +7,7 @@ builds the image and pushes it to GitHub Container Registry on every push to
 ## 1. Push to your fork and let CI build the image
 
 ```bash
-git remote set-url origin https://github.com/<you>/pick-a-recipe.git   # if not already pointed at your fork
+git remote set-url origin https://github.com/nicoloboatto/pick-a-recipe.git   # if not already pointed at your fork
 git push origin main
 ```
 
@@ -15,7 +15,7 @@ Watch it run under the repo's **Actions** tab. When it finishes, the image is
 available at:
 
 ```
-ghcr.io/<you>/pick-a-recipe:latest
+ghcr.io/nicoloboatto/pick-a-recipe:latest
 ```
 
 (GitHub lowercases the owner/repo automatically, so it doesn't matter what
@@ -26,13 +26,13 @@ case your username or repo name use.)
 Newly published GHCR packages are **private** by default. Pick one:
 
 - **Public (simplest for personal testing):** on GitHub, go to
-  `https://github.com/<you>?tab=packages` → open the `pick-a-recipe` package →
+  `https://github.com/nicoloboatto?tab=packages` → open the `pick-a-recipe` package →
   **Package settings** → **Change visibility** → **Public**. After that,
   Unraid can pull it with no login.
 - **Keep it private:** in Unraid, go to **Docker tab → Registrations** (or
   run on the host terminal):
   ```bash
-  docker login ghcr.io -u <you>
+  docker login ghcr.io -u nicoloboatto
   # password: a GitHub Personal Access Token (classic) with the read:packages scope
   ```
 
@@ -43,8 +43,8 @@ Newly published GHCR packages are **private** by default. Pick one:
 [`unraid-template.xml`](unraid-template.xml) is a standard Unraid Docker
 container template you can register locally:
 
-1. Edit the two `REPLACE_WITH_YOUR_GITHUB_USERNAME` placeholders in the file
-   (repository image path, support link, icon URL) to match your fork.
+1. It already points at `ghcr.io/nicoloboatto/pick-a-recipe:latest` — edit it
+   further only if you rename the repo.
 2. Copy it onto the Unraid box at
    `/boot/config/plugins/dockerMan/templates-user/pick-a-recipe.xml`
    (e.g. `scp unraid-template.xml root@<unraid-ip>:/boot/config/plugins/dockerMan/templates-user/pick-a-recipe.xml`).
@@ -61,7 +61,7 @@ fill in:
 | Field | Value |
 |---|---|
 | Name | `pick-a-recipe` |
-| Repository | `ghcr.io/<you>/pick-a-recipe:latest` |
+| Repository | `ghcr.io/nicoloboatto/pick-a-recipe:latest` |
 | Network Type | `bridge` |
 | Port: Container `5006` → Host | `5006` (or any free port) |
 | Path: Container `/app/data` → Host | `/mnt/user/appdata/pick-a-recipe` |

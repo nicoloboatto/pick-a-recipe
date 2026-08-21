@@ -1,18 +1,18 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>pick-a-recipe</Name>
-  <Repository>ghcr.io/REPLACE_WITH_YOUR_GITHUB_USERNAME/pick-a-recipe:latest</Repository>
+  <Repository>ghcr.io/nicoloboatto/pick-a-recipe:latest</Repository>
   <Registry>https://ghcr.io/</Registry>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/REPLACE_WITH_YOUR_GITHUB_USERNAME/pick-a-recipe</Support>
+  <Support>https://github.com/nicoloboatto/pick-a-recipe</Support>
   <Overview>Extract recipes from TikTok/YouTube/Instagram videos with AI and export them to Tandoor, Mealie, or a Mela .melarecipe file. Built from your own fork's GitHub Actions image (see UNRAID.md in the repo).</Overview>
   <Category>MediaApp: Other</Category>
   <WebUI>http://[IP]:[PORT:5006]/</WebUI>
   <TemplateURL/>
-  <Icon>https://raw.githubusercontent.com/REPLACE_WITH_YOUR_GITHUB_USERNAME/pick-a-recipe/main/ui/static/icons/icon-192x192.png</Icon>
+  <Icon>https://raw.githubusercontent.com/nicoloboatto/pick-a-recipe/main/ui/static/icons/icon-192x192.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>
