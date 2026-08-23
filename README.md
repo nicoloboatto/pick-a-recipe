@@ -184,7 +184,7 @@ Every completed recipe remembers the exact prompt used (viewable, collapsed, in 
 3. Paste a video URL (TikTok, YouTube, Instagram, etc.)
 4. Click "Extract Recipe"
 5. Watch the real-time progress as the video is processed
-6. If "Confirm Before Upload" is enabled, review the recipe and pick the dish photo
+6. If "Confirm Before Upload" is enabled, the recipe appears in an **Awaiting Confirmation** list — click "Review" to open it, pick the dish photo, and confirm (or close the review without deciding to come back to it later; it stays in the list). Multiple recipes finishing around the same time each get their own entry, so nothing gets stuck behind a modal you haven't dismissed yet.
 7. The recipe is automatically uploaded to your configured recipe manager, or saved as a `.melarecipe` file if the target is Mela
 
 ### PWA / Mobile App (Share Links Directly)

@@ -15,10 +15,12 @@
 ### Bug Fixes
 
 - **Duplicate "Recently Completed" Cards**: Every job/preview socket event (`job_progress`, `job_complete`, `job_failed`, `job_cancelled`, `recipe_preview`, `recipe_cancelled`) was emitted twice — once scoped to the job's room, once as a global broadcast. Since a plain `socketio.emit()` with no room already reaches every connected client (room membership included), the room-scoped emit was pure redundancy: a client that also joined the room (as the main page always does) received each event twice, producing a duplicate completed-recipe card, duplicate notifications, etc. Removed the redundant room-scoped emits, keeping only the broadcast.
+- **`/api/pending-uploads` 500 when a job had no image candidates**: `upload.get('image_candidates', [])` only falls back to `[]` when the key is *missing*, not when it's `None` — and a pending upload created with no candidate images stores exactly that. Normalized `image_candidates` to always be a list in `database.py`'s getters, at the source.
 
 ### Improvements
 
 - **Deterministic Title Case**: Recipe titles are now normalized to title case in code (`helpers.to_title_case()`), not left to the LLM — mechanical formatting isn't inference material. Handles apostrophes correctly (unlike `str.title()`), hyphenated words ("Air-Fried"), and common connector words ("Chicken with Rice", not "Chicken With Rice"). Applied once in `chef.py`'s postprocessing, so it covers both the initial extraction and Re-run Structuring.
+- **Awaiting Confirmation List**: Recipes waiting on confirm-before-upload no longer only ever pop a single modal — a persistent "Awaiting Confirmation" section lists every pending recipe, so a second one finishing while the first is still open (or arriving after you navigated away) doesn't get silently stuck until a page reload. The confirm modal gained a non-destructive close (✕) that returns a recipe to the list instead of deciding for you.
 
 ## [1.4.0] - 2026-01-21
 

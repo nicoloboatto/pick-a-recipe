@@ -1181,7 +1181,7 @@ def get_pending_uploads_api():
                 item['image_data'] = base64.b64encode(f.read()).decode('utf-8')
         
         # Load candidate images
-        image_candidates = upload.get('image_candidates', [])
+        image_candidates = upload.get('image_candidates') or []
         candidate_images_data = []
         for idx, candidate_path in enumerate(image_candidates):
             if os.path.exists(candidate_path):
@@ -1225,7 +1225,7 @@ def get_pending_upload_api(upload_id):
             item['image_data'] = base64.b64encode(f.read()).decode('utf-8')
     
     # Load candidate images
-    image_candidates = upload.get('image_candidates', [])
+    image_candidates = upload.get('image_candidates') or []
     candidate_images_data = []
     for idx, candidate_path in enumerate(image_candidates):
         if os.path.exists(candidate_path):

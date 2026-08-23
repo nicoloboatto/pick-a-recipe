@@ -1091,6 +1091,8 @@ def get_pending_upload(upload_id: str) -> Optional[Dict[str, Any]]:
                     item['image_candidates'] = json.loads(item['image_candidates'])
                 except json.JSONDecodeError:
                     item['image_candidates'] = []
+            else:
+                item['image_candidates'] = []
             return item
     return None
 
@@ -1135,6 +1137,8 @@ def get_pending_uploads() -> List[Dict[str, Any]]:
                     item['image_candidates'] = json.loads(item['image_candidates'])
                 except json.JSONDecodeError:
                     item['image_candidates'] = []
+            else:
+                item['image_candidates'] = []
             results.append(item)
         return results
 

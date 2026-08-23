@@ -31,6 +31,14 @@
         </details>
     </div>
     
+    <!-- Pending Confirmations Section -->
+    <div class="jobs-section" id="pending-confirmations-section" style="display: none;">
+        <h2><i class="fas fa-bell"></i> Awaiting Confirmation <span class="job-count" id="pending-count">(0)</span></h2>
+        <div class="jobs-list" id="pending-confirmations-list">
+            <!-- Pending confirmation cards will be dynamically inserted here -->
+        </div>
+    </div>
+
     <!-- Active Jobs Section -->
     <div class="jobs-section" id="jobs-section" style="display: none;">
         <h2><i class="fas fa-tasks"></i> Active Jobs <span class="job-count" id="job-count">(0)</span></h2>
@@ -100,6 +108,21 @@
     </div>
 </template>
 
+<!-- Pending Confirmation Card Template -->
+<template id="pending-confirmation-card-template">
+    <div class="job-card pending-confirmation-card" data-upload-id="">
+        <div class="job-header">
+            <div class="job-info">
+                <h3 class="job-title">Recipe Name</h3>
+                <p class="job-url pending-target"></p>
+            </div>
+            <button class="btn btn-primary review-pending-btn">
+                <i class="fas fa-eye"></i> Review
+            </button>
+        </div>
+    </div>
+</template>
+
 <!-- Completed Recipe Card Template -->
 <template id="completed-card-template">
     <div class="completed-card" data-job-id="">
@@ -125,6 +148,7 @@
         <div class="modal-header">
             <h2><i class="fas fa-eye"></i> Recipe Preview</h2>
             <p class="modal-subtitle">Review before <span id="preview-action">uploading to</span> <span id="preview-target"></span></p>
+            <button class="modal-close" id="close-preview-modal" title="Review later (keeps it in the Awaiting Confirmation list)">&times;</button>
         </div>
         
         <div class="modal-body">

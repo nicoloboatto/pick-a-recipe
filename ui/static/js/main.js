@@ -37,7 +37,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const previewInstructions = document.getElementById('preview-instructions');
     const confirmUploadBtn = document.getElementById('confirm-upload-btn');
     const cancelUploadBtn = document.getElementById('cancel-upload-btn');
-    
+    const closePreviewModalBtn = document.getElementById('close-preview-modal');
+
+    // Pending Confirmations ("Awaiting Confirmation" notification list)
+    const pendingConfirmationsSection = document.getElementById('pending-confirmations-section');
+    const pendingConfirmationsList = document.getElementById('pending-confirmations-list');
+    const pendingCountEl = document.getElementById('pending-count');
+    const pendingConfirmationCardTemplate = document.getElementById('pending-confirmation-card-template');
+    const pendingUploadsMap = new Map(); // upload_id -> full recipe_preview payload
+
     // Current preview state
     let currentUploadId = null;
     let currentPreviewJobId = null;
@@ -74,11 +82,14 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     socket.on('recipe_preview', function(data) {
-        showPreviewModal(data);
+        addPendingUpload(data);
     });
-    
+
     socket.on('recipe_cancelled', function(data) {
-        hidePreviewModal();
+        removePendingUploadByJobId(data.job_id);
+        if (currentPreviewJobId === data.job_id) {
+            hidePreviewModal();
+        }
         showNotification(data.message || 'Upload cancelled', 'info');
     });
     
@@ -116,21 +127,31 @@ document.addEventListener('DOMContentLoaded', function() {
             if (currentUploadId) {
                 // Use REST API for cross-device support, with WebSocket as fallback
                 confirmUploadViaAPI(currentUploadId, selectedImageIndex);
+                removePendingUpload(currentUploadId);
                 hidePreviewModal();
             }
         });
     }
-    
+
     if (cancelUploadBtn) {
         cancelUploadBtn.addEventListener('click', function() {
             if (currentUploadId) {
                 // Use REST API for cross-device support, with WebSocket as fallback
                 cancelUploadViaAPI(currentUploadId);
+                removePendingUpload(currentUploadId);
                 hidePreviewModal();
             }
         });
     }
-    
+
+    if (closePreviewModalBtn) {
+        closePreviewModalBtn.addEventListener('click', function() {
+            // Just closes the modal without deciding - the recipe stays in
+            // the Awaiting Confirmation list for later.
+            hidePreviewModal();
+        });
+    }
+
     // ===== Job Management Functions =====
     
     /**
@@ -680,6 +701,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            // Keep the list entry in sync too, so re-opening this recipe
+            // later from "Awaiting Confirmation" shows the re-run result,
+            // not the stale pre-rerun one.
+            if (pendingUploadsMap.has(currentUploadId)) {
+                pendingUploadsMap.get(currentUploadId).recipe = data.recipe;
+            }
             _populatePreviewFields(data.recipe);
             showNotification('Recipe re-structured!', 'success');
         } catch (error) {
@@ -722,7 +749,64 @@ document.addEventListener('DOMContentLoaded', function() {
         currentUploadId = null;
         currentPreviewJobId = null;
     }
-    
+
+    // ===== Pending Confirmations ("Awaiting Confirmation" list) =====
+    //
+    // Recipes awaiting confirmation used to only ever pop a single modal, so
+    // a second recipe finishing while the first was still open (or the user
+    // navigating away) meant it silently sat in the DB until a page reload
+    // triggered checkPendingUploads() again. Now every pending upload is
+    // tracked here and rendered as a persistent list the user can act on at
+    // their own pace, with the newest one still auto-opening if nothing else
+    // is currently open.
+
+    function renderPendingConfirmations() {
+        if (!pendingConfirmationsSection || !pendingConfirmationsList || !pendingConfirmationCardTemplate) return;
+
+        pendingConfirmationsList.innerHTML = '';
+        pendingUploadsMap.forEach((data, uploadId) => {
+            const card = pendingConfirmationCardTemplate.content.cloneNode(true);
+            const cardEl = card.querySelector('.pending-confirmation-card');
+            cardEl.dataset.uploadId = uploadId;
+            cardEl.querySelector('.job-title').textContent = (data.recipe && data.recipe.name) || 'Untitled Recipe';
+            cardEl.querySelector('.pending-target').textContent =
+                data.export_to_both ? 'Tandoor & Mealie' : (data.output_target || 'recipe manager');
+            cardEl.querySelector('.review-pending-btn').addEventListener('click', () => {
+                showPreviewModal(data);
+            });
+            pendingConfirmationsList.appendChild(card);
+        });
+
+        const count = pendingUploadsMap.size;
+        if (pendingCountEl) pendingCountEl.textContent = `(${count})`;
+        pendingConfirmationsSection.style.display = count > 0 ? 'block' : 'none';
+    }
+
+    function addPendingUpload(data) {
+        const isNew = !pendingUploadsMap.has(data.upload_id);
+        pendingUploadsMap.set(data.upload_id, data);
+        renderPendingConfirmations();
+        // Auto-open only if nothing else is currently open and this wasn't
+        // already known (avoids re-popping the modal on every reconnect poll).
+        if (isNew && !currentUploadId) {
+            showPreviewModal(data);
+        }
+    }
+
+    function removePendingUpload(uploadId) {
+        pendingUploadsMap.delete(uploadId);
+        renderPendingConfirmations();
+    }
+
+    function removePendingUploadByJobId(jobId) {
+        for (const [uploadId, data] of pendingUploadsMap.entries()) {
+            if (data.job_id === jobId) {
+                pendingUploadsMap.delete(uploadId);
+            }
+        }
+        renderPendingConfirmations();
+    }
+
     // ===== Pending Uploads Functions (Cross-Device Support) =====
     
     /**
@@ -733,23 +817,23 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const response = await fetch('/api/pending-uploads');
             const data = await response.json();
-            
+
             if (data.pending_uploads && data.pending_uploads.length > 0) {
-                // Show the first pending upload (there's usually only one)
-                const pending = data.pending_uploads[0];
-                showNotification(`Recipe "${pending.recipe.name || 'Untitled'}" is waiting for your confirmation!`, 'info');
-                
-                // Show preview modal with the pending upload data
-                showPreviewModal({
-                    upload_id: pending.upload_id,
-                    job_id: pending.job_id,
-                    recipe: pending.recipe,
-                    image_data: pending.image_data,
-                    candidate_images: pending.candidate_images,
-                    best_image_index: pending.best_image_index,
-                    output_target: pending.output_target,
-                    export_to_both: false  // Can be enhanced to check config
+                data.pending_uploads.forEach(pending => {
+                    addPendingUpload({
+                        upload_id: pending.upload_id,
+                        job_id: pending.job_id,
+                        recipe: pending.recipe,
+                        image_data: pending.image_data,
+                        candidate_images: pending.candidate_images,
+                        best_image_index: pending.best_image_index,
+                        output_target: pending.output_target,
+                        export_to_both: false  // Can be enhanced to check config
+                    });
                 });
+                if (data.pending_uploads.length > 1) {
+                    showNotification(`${data.pending_uploads.length} recipes are waiting for your confirmation!`, 'info');
+                }
             }
         } catch (error) {
             console.error('Error checking pending uploads:', error);
