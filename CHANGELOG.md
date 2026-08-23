@@ -5,6 +5,7 @@
 ### New Features
 
 - **Mela Export**: Added `mela` as a new Output Target. Mela has no server or API, so instead of uploading, Pick-a-Recipe writes a `.melarecipe` JSON file (with embedded base64 thumbnail) and the web UI offers it as a download from the completed-job card, the job page, and History. Added a configurable Mela output directory setting, a `mela_file_path` history column, download endpoint, and automatic file cleanup when a history entry is deleted.
+- **Follow Linked Recipe Pages**: New `recipe_link_extractor.py` scans the post caption for a linked recipe blog post, filters out social-platform/link-in-bio noise, follows shorteners, and extracts recipe text (preferring schema.org `Recipe` JSON-LD, falling back to readability-style extraction) to feed the structuring LLM as an additional, clearly-labeled source alongside the transcript and on-screen text. Paywalls, bot-checks, and thin content are treated as "unavailable," never as failures — the job continues with video content only, the link is preserved on the recipe and surfaced in Mela's notes, and the review screen/History show a small note. New "Follow recipe links found in captions" setting (default on).
 
 ## [1.4.0] - 2026-01-21
 

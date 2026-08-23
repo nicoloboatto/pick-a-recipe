@@ -153,10 +153,15 @@ All configuration is managed through the web UI settings page (`/settings`). On 
 | **Mealie API Key** | API token from Mealie |
 | **Mela Output Directory** | Where `.melarecipe` files are written (defaults to a folder inside the persistent data volume) |
 | **Confirm Before Upload** | Show recipe preview before uploading (or saving, for Mela) |
+| **Follow recipe links found in captions** | Fetch a recipe blog post linked in the caption and use its text alongside the video content (default: on) |
 
 ### Exporting to Mela
 
 [Mela](https://mela.recipes/) is a macOS/iOS recipe app with no server or API — recipes are `.melarecipe` files you import directly into the app. When **Output Target** is set to `mela`, Pick-a-Recipe doesn't upload anywhere: it writes a `.melarecipe` file to the configured output directory and the web UI offers it as a download (from the completed-job card, the job page, or later from History). The file is also kept alongside its history entry so it can be re-downloaded at any time, and is cleaned up automatically when that history entry is deleted.
+
+### Following linked recipe pages
+
+Creators often link their blog post from the caption, and that page usually has the exact written recipe — better source material than a spoken transcript. When enabled (the default), Pick-a-Recipe scans the caption for links, skips social-platform and link-in-bio URLs, follows shorteners, and fetches up to three candidates until one yields usable text. It prefers schema.org `Recipe` structured data when the page has it, falling back to readability-style article extraction otherwise. Paywalls, bot-check pages, and thin/blocked content are all treated as "unavailable," never as failures: the job continues with video-derived content only, the original link is preserved on the recipe (and surfaced in Mela's Notes field), and a small note appears on the review screen and in History so you know to check the source manually if the result looks thin.
 
 ## Usage
 

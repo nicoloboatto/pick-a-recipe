@@ -90,7 +90,11 @@
             
             <div class="recipe-detail-content">
                 <p id="modal-description"></p>
-                
+                <p id="modal-linked-note" class="form-hint" style="display:none;">
+                    <i class="fas fa-info-circle"></i>
+                    <span id="modal-linked-note-text"></span>
+                </p>
+
                 <div class="recipe-section" id="modal-ingredients-section">
                     <h4><i class="fas fa-list"></i> Ingredients</h4>
                     <ul id="modal-ingredients"></ul>
@@ -667,7 +671,16 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const recipe = item.recipe_data || {};
             document.getElementById('modal-description').textContent = recipe.description || '';
-            
+
+            const modalLinkedNote = document.getElementById('modal-linked-note');
+            const modalLinkedNoteText = document.getElementById('modal-linked-note-text');
+            if (recipe.linkedRecipeStatus === 'unavailable') {
+                modalLinkedNoteText.textContent = 'Linked recipe page could not be read (paywalled or blocked); using video content only.';
+                modalLinkedNote.style.display = 'block';
+            } else {
+                modalLinkedNote.style.display = 'none';
+            }
+
             const ingredientsList = document.getElementById('modal-ingredients');
             const ingredientsSection = document.getElementById('modal-ingredients-section');
             if (recipe.recipeIngredient && recipe.recipeIngredient.length > 0) {

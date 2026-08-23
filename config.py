@@ -95,6 +95,9 @@ DEFAULT_CONFIG = {
     "yt_dlp_cookies_browser": "",
     "max_concurrent_jobs": "3",
     "allow_registration": "true",
+    "follow_recipe_links": "true",
+    "custom_structuring_prompt": "",
+    "custom_vision_prompt": "",
 }
 
 
@@ -263,6 +266,19 @@ class Config:
     def ALLOW_REGISTRATION(self) -> bool:
         value = self._get('allow_registration', DEFAULT_CONFIG['allow_registration'])
         return value.lower() in ('true', '1', 'yes', 'on')
+
+    @property
+    def FOLLOW_RECIPE_LINKS(self) -> bool:
+        value = self._get('follow_recipe_links', DEFAULT_CONFIG['follow_recipe_links'])
+        return value.lower() in ('true', '1', 'yes', 'on')
+
+    @property
+    def CUSTOM_STRUCTURING_PROMPT(self) -> str:
+        return self._get('custom_structuring_prompt', DEFAULT_CONFIG['custom_structuring_prompt'])
+
+    @property
+    def CUSTOM_VISION_PROMPT(self) -> str:
+        return self._get('custom_vision_prompt', DEFAULT_CONFIG['custom_vision_prompt'])
 
     def reload(self):
         """Reload configuration from database."""

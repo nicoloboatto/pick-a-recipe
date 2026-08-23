@@ -122,6 +122,17 @@ def _build_nutrition_text(recipe_data: dict) -> str:
     return "\n".join(lines)
 
 
+def _build_notes_text(recipe_data: dict) -> str:
+    """Surface the linked-recipe-page result (if step 2's link following ran)."""
+    status = recipe_data.get("linkedRecipeStatus")
+    url = recipe_data.get("linkedRecipeUrl")
+    if status == "ok" and url:
+        return f"Source blog: {url}"
+    if status == "unavailable":
+        return "Note: linked recipe page could not be read; ingredients/instructions from video only."
+    return ""
+
+
 def _build_categories(recipe_data: dict) -> list[str]:
     categories = recipe_data.get("recipeCategory") or []
     if isinstance(categories, str):
@@ -170,7 +181,7 @@ class Mela:
             "totalTime": _format_duration(recipe_data.get("totalTime", "")),
             "ingredients": _build_ingredients_text(recipe_data),
             "instructions": _build_instructions_text(recipe_data),
-            "notes": "",
+            "notes": _build_notes_text(recipe_data),
             "nutrition": _build_nutrition_text(recipe_data),
             "link": source_url,
         }

@@ -8,3 +8,5 @@ flask-socketio
 google-genai
 authlib
 bcrypt
+beautifulsoup4
+trafilatura

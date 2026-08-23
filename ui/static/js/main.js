@@ -611,7 +611,18 @@ document.addEventListener('DOMContentLoaded', function() {
         // Set recipe info
         if (previewTitle) previewTitle.textContent = data.recipe.name || 'Untitled Recipe';
         if (previewDescription) previewDescription.textContent = data.recipe.description || '';
-        
+
+        const previewLinkedNote = document.getElementById('preview-linked-note');
+        const previewLinkedNoteText = document.getElementById('preview-linked-note-text');
+        if (previewLinkedNote && previewLinkedNoteText) {
+            if (data.recipe.linkedRecipeStatus === 'unavailable') {
+                previewLinkedNoteText.textContent = 'Linked recipe page could not be read (paywalled or blocked); using video content only.';
+                previewLinkedNote.style.display = 'block';
+            } else {
+                previewLinkedNote.style.display = 'none';
+            }
+        }
+
         if (previewIngredients) {
             previewIngredients.innerHTML = '';
             if (data.recipe.recipeIngredient) {

@@ -546,6 +546,7 @@ def settings():
         config['target_language'] = request.form.get('target_language', 'he')
         config['output_target'] = request.form.get('output_target', 'tandoor')
         config['export_to_both'] = 'true' if request.form.get('export_to_both') else 'false'
+        config['follow_recipe_links'] = 'true' if request.form.get('follow_recipe_links') else 'false'
         config['whisper_model'] = request.form.get('whisper_model', 'small')
         config['hf_token'] = request.form.get('hf_token', '')
         config['yt_dlp_cookies_file'] = request.form.get('yt_dlp_cookies_file', '')
