@@ -62,9 +62,14 @@ def _build_ingredients_text(recipe_data: dict) -> str:
     ing_struct = recipe_data.get("recipeIngredients") or []
     lines = []
     if ing_struct:
+        last_group = None
         for item in ing_struct:
             if not isinstance(item, dict):
                 continue
+            group = (item.get("group") or "").strip()
+            if group and group != last_group:
+                lines.append(f"# {group}")
+            last_group = group or last_group
             line = _format_ingredient_line(item)
             if line:
                 lines.append(line)
