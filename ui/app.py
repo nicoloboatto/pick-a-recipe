@@ -1392,14 +1392,9 @@ def process_video_job(job_id, jm):
     preview = None
     if app_config.CONFIRM_BEFORE_UPLOAD:
         def emit_preview(payload):
-            socketio.emit('recipe_preview', payload, room=f'job_{job_id}')
             socketio.emit('recipe_preview', payload)
 
         def emit_cancelled():
-            socketio.emit('recipe_cancelled', {
-                'job_id': job_id,
-                'message': 'Recipe upload was cancelled',
-            }, room=f'job_{job_id}')
             socketio.emit('recipe_cancelled', {
                 'job_id': job_id,
                 'message': 'Recipe upload was cancelled',

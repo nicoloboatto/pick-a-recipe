@@ -148,7 +148,6 @@ class JobManager:
                 self.cancellation_flags[job_id].set()
         result = db_cancel_job(job_id)
         if result:
-            self.socketio.emit('job_cancelled', {'job_id': job_id}, room=f'job_{job_id}')
             self.socketio.emit('job_cancelled', {'job_id': job_id})
             self._broadcast_queue_positions()
         return result
@@ -198,7 +197,6 @@ class JobManager:
             'video_title': video_title,
             'queue_position': get_queue_position(job_id) if status == 'queued' else 0,
         }
-        self.socketio.emit('job_progress', payload, room=f'job_{job_id}')
         self.socketio.emit('job_progress', payload)
 
     def complete_job(
@@ -249,7 +247,6 @@ class JobManager:
             'output_target': output_target,
             'history_id': history_id,
         }
-        self.socketio.emit('job_complete', payload, room=f'job_{job_id}')
         self.socketio.emit('job_complete', payload)
 
     def fail_job(self, job_id: str, error_message: str, llm_tokens: int = 0) -> None:
@@ -274,7 +271,6 @@ class JobManager:
         db_fail_job(job_id, error_message)
 
         payload = {'job_id': job_id, 'error': error_message}
-        self.socketio.emit('job_failed', payload, room=f'job_{job_id}')
         self.socketio.emit('job_failed', payload)
 
     def get_all_active_jobs(self) -> list:

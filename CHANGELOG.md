@@ -12,6 +12,10 @@
 
 - **Grouped, Raw-State Ingredients**: The structuring prompt now requires ingredients in their raw, pre-instruction state (no "roasted pumpkin puree" when a step roasts and purees raw pumpkin) and decomposes generic prepared components (a bechamel, a marinade, a dough) into their own base ingredients. Added a `group` field to the ingredient schema so multi-component recipes (marinade + sauce + coating, filling + bechamel, etc.) get labeled sections (`MARINADE`, `SAUCE`, ...) instead of one flat list, and the same ingredient name used in two components (e.g. salt) no longer incorrectly merges into a single line. Tandoor (`is_header` rows), Mealie (inline `title` headers), and Mela (`#` headings) all render the groups natively. The linked-recipe-page priority language was also sharpened: when present, it now explicitly outranks the caption and on-screen text, not just the spoken transcript.
 
+### Bug Fixes
+
+- **Duplicate "Recently Completed" Cards**: Every job/preview socket event (`job_progress`, `job_complete`, `job_failed`, `job_cancelled`, `recipe_preview`, `recipe_cancelled`) was emitted twice — once scoped to the job's room, once as a global broadcast. Since a plain `socketio.emit()` with no room already reaches every connected client (room membership included), the room-scoped emit was pure redundancy: a client that also joined the room (as the main page always does) received each event twice, producing a duplicate completed-recipe card, duplicate notifications, etc. Removed the redundant room-scoped emits, keeping only the broadcast.
+
 ## [1.4.0] - 2026-01-21
 
 ### New Features
