@@ -779,14 +779,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function addPendingUpload(data) {
-        const isNew = !pendingUploadsMap.has(data.upload_id);
         pendingUploadsMap.set(data.upload_id, data);
         renderPendingConfirmations();
-        // Auto-open only if nothing else is currently open and this wasn't
-        // already known (avoids re-popping the modal on every reconnect poll).
-        if (isNew && !currentUploadId) {
-            showPreviewModal(data);
-        }
+        // Never auto-opens the modal - the sidebar badge and this list are
+        // the notification; the user opens a recipe by clicking "Review".
     }
 
     function removePendingUpload(uploadId) {
