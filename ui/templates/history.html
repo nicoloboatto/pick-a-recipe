@@ -19,6 +19,7 @@
                 <option value="">All Status</option>
                 <option value="processing">In Progress</option>
                 <option value="pending">Pending</option>
+                <option value="awaiting_confirmation">Needs Confirmation</option>
                 <option value="success">Successful</option>
                 <option value="failed">Failed</option>
                 <option value="cancelled">Cancelled</option>
@@ -235,6 +236,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const confirmBulkDeleteBtn = document.getElementById('confirm-bulk-delete-btn');
     const bulkDeleteCountSpan = document.getElementById('bulk-delete-count');
     
+    // Pre-select the status filter from a ?status= URL param (used by the
+    // sidebar "needs confirmation" badge link).
+    const urlStatus = new URLSearchParams(window.location.search).get('status');
+    if (urlStatus && [...statusFilter.options].some(o => o.value === urlStatus)) {
+        statusFilter.value = urlStatus;
+    }
+
     // Load history on page load
     loadHistory();
     

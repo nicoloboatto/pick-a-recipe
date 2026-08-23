@@ -28,7 +28,7 @@ from database import (
     delete_history_entries_bulk, delete_job_entry, delete_jobs_bulk,
     get_combined_history_and_jobs, get_combined_history_and_jobs_count,
     get_job, get_active_jobs,
-    create_pending_upload, get_pending_upload, get_pending_uploads,
+    create_pending_upload, get_pending_upload, get_pending_uploads, count_pending_uploads,
     update_pending_upload_recipe_data,
     confirm_pending_upload, cancel_pending_upload, delete_pending_upload,
     cleanup_expired_pending_uploads, cleanup_old_jobs,
@@ -1208,6 +1208,18 @@ def delete_cookies_file():
 
 
 # ===== Pending Uploads API Endpoints =====
+
+@app.route('/api/pending-uploads/count', methods=['GET'])
+@api_login_required
+def get_pending_uploads_count_api():
+    """Lightweight count for the sidebar 'needs confirmation' badge.
+
+    Avoids loading every candidate image's base64 payload just to show a
+    number, unlike the full /api/pending-uploads endpoint.
+    """
+    cleanup_expired_pending_uploads()
+    return jsonify({'count': count_pending_uploads()})
+
 
 @app.route('/api/pending-uploads', methods=['GET'])
 @api_login_required

@@ -901,8 +901,12 @@ def get_combined_history_and_jobs(limit: int = 50, offset: int = 0,
                 jobs_params.extend(['pending', 'queued'])
             elif status_filter == 'processing':
                 history_query += ' AND 1=0'  # No history entries for processing
-                jobs_query += ' AND rj.status NOT IN (?, ?, ?, ?)'
-                jobs_params.extend(['completed', 'failed', 'cancelled', 'pending'])
+                jobs_query += ' AND rj.status NOT IN (?, ?, ?, ?, ?)'
+                jobs_params.extend(['completed', 'failed', 'cancelled', 'pending', 'awaiting_confirmation'])
+            elif status_filter == 'awaiting_confirmation':
+                history_query += ' AND 1=0'  # No history entries for awaiting_confirmation
+                jobs_query += ' AND rj.status = ?'
+                jobs_params.append('awaiting_confirmation')
         
         # Apply search filter
         if search:
@@ -1000,8 +1004,13 @@ def get_combined_history_and_jobs_count(status_filter: Optional[str] = None,
             elif status_filter == 'processing':
                 history_query = 'SELECT 0'  # No history entries for processing
                 history_params = []
-                jobs_query += ' AND rj.status NOT IN (?, ?, ?, ?)'
-                jobs_params.extend(['completed', 'failed', 'cancelled', 'pending'])
+                jobs_query += ' AND rj.status NOT IN (?, ?, ?, ?, ?)'
+                jobs_params.extend(['completed', 'failed', 'cancelled', 'pending', 'awaiting_confirmation'])
+            elif status_filter == 'awaiting_confirmation':
+                history_query = 'SELECT 0'  # No history entries for awaiting_confirmation
+                history_params = []
+                jobs_query += ' AND rj.status = ?'
+                jobs_params.append('awaiting_confirmation')
         
         # Apply search filter
         if search:
@@ -1118,6 +1127,22 @@ def update_pending_upload_recipe_data(upload_id: str, recipe_data: Dict) -> bool
         )
         conn.commit()
         return cursor.rowcount > 0
+
+
+def count_pending_uploads() -> int:
+    """Count pending uploads that haven't expired, without loading image data.
+
+    Used by the sidebar badge, which just needs a number and shouldn't pull
+    every candidate image's base64 payload on every poll.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT COUNT(*) FROM pending_uploads
+            WHERE status = 'pending'
+            AND (expires_at IS NULL OR expires_at > datetime('now'))
+        ''')
+        return cursor.fetchone()[0]
 
 
 def get_pending_uploads() -> List[Dict[str, Any]]:

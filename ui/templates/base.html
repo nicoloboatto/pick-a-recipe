@@ -36,6 +36,10 @@
             <a href="{{ url_for('history') }}" class="nav-link {% if request.endpoint == 'history' %}active{% endif %}" title="History">
                 <i class="fas fa-history"></i>
             </a>
+            <a href="{{ url_for('history') }}?status=awaiting_confirmation" class="nav-link" title="Needs Confirmation" id="pending-badge-link" style="display: none;">
+                <i class="fas fa-bell"></i>
+                <span class="nav-badge-count" id="pending-badge-count">0</span>
+            </a>
             <a href="{{ url_for('settings') }}" class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" title="Settings">
                 <i class="fas fa-cog"></i>
             </a>
@@ -68,7 +72,10 @@
     {% block modals %}{% endblock %}
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
-    
+    {% if session.user %}
+    <script src="{{ url_for('static', filename='js/pending-badge.js') }}?v={{ static_version }}"></script>
+    {% endif %}
+
     <!-- PWA Service Worker Registration -->
     <script>
         // Store install prompt for later use

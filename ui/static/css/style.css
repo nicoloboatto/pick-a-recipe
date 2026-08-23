@@ -112,6 +112,26 @@ a:hover {
     font-size: 1.25rem;
 }
 
+#pending-badge-link {
+    position: relative;
+}
+
+.nav-badge-count {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background-color: var(--danger-color, #ef4444);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+}
+
 /* ===== Main Content ===== */
 main {
     min-height: 100vh;

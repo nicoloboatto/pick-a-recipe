@@ -88,8 +88,4 @@ document.addEventListener('DOMContentLoaded', function() {
     async function cancelJob(id) {
         await fetch('/api/jobs/' + id, { method: 'DELETE' });
     }
-
-    if (window.PickARecipeNotifications) {
-        PickARecipeNotifications.requestPermission();
-    }
 });

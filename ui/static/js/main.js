@@ -220,10 +220,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 'success'
             );
 
-            if (window.PickARecipeNotifications) {
-                PickARecipeNotifications.requestPermission();
-            }
-            
         } catch (error) {
             console.error('Error starting job:', error);
             showNotification('Failed to start job', 'error');
