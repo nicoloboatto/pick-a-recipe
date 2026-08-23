@@ -60,6 +60,6 @@
         maxConcurrent: {{ max_concurrent }},
     };
 </script>
-<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
-<script src="{{ url_for('static', filename='js/job-page.js') }}"></script>
+<script src="{{ url_for('static', filename='js/notifications.js') }}?v={{ static_version }}"></script>
+<script src="{{ url_for('static', filename='js/job-page.js') }}?v={{ static_version }}"></script>
 {% endblock %}

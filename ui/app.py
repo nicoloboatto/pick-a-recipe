@@ -115,14 +115,24 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 FLASK_DEBUG = os.getenv('FLASK_DEBUG', 'false').lower() in ('true', '1', 'yes')
 
+# Cache-busting token for static JS/CSS, fixed for the life of this process.
+# Previously a hardcoded literal that had to be manually bumped by hand on
+# every JS/CSS change and routinely wasn't (main.js carried a stale ?v=5
+# through several rewrites, so browsers kept serving old code indefinitely
+# - reloading looked like it worked because it re-ran the *old* main.js's
+# own reconnect logic, not because it picked up the new file). Deriving it
+# from process start time means every container restart - i.e. every
+# deploy - naturally busts the cache with zero manual upkeep.
+import time as _time
+_STATIC_ASSET_VERSION = str(int(_time.time()))
+
 
 @app.context_processor
 def inject_template_globals():
     """Expose debug flag and static cache-bust version to templates."""
-    import time
     return {
         'flask_debug': FLASK_DEBUG,
-        'static_version': str(int(time.time())) if FLASK_DEBUG else '7',
+        'static_version': str(int(_time.time())) if FLASK_DEBUG else _STATIC_ASSET_VERSION,
     }
 
 # Use threading mode instead of eventlet to avoid monkey-patching issues with SSL/requests
