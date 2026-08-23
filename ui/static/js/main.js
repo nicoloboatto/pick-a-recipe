@@ -608,14 +608,26 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        // Set recipe info
-        if (previewTitle) previewTitle.textContent = data.recipe.name || 'Untitled Recipe';
-        if (previewDescription) previewDescription.textContent = data.recipe.description || '';
+        _populatePreviewFields(data.recipe);
+
+        previewModal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+
+    /**
+     * Populate the preview modal's title/description/linked-page note/
+     * ingredients/instructions from a recipe object. Split out from
+     * showPreviewModal so "Re-run Structuring" can refresh just these
+     * fields in place without redoing image-candidate setup.
+     */
+    function _populatePreviewFields(recipe) {
+        if (previewTitle) previewTitle.textContent = recipe.name || 'Untitled Recipe';
+        if (previewDescription) previewDescription.textContent = recipe.description || '';
 
         const previewLinkedNote = document.getElementById('preview-linked-note');
         const previewLinkedNoteText = document.getElementById('preview-linked-note-text');
         if (previewLinkedNote && previewLinkedNoteText) {
-            if (data.recipe.linkedRecipeStatus === 'unavailable') {
+            if (recipe.linkedRecipeStatus === 'unavailable') {
                 previewLinkedNoteText.textContent = 'Linked recipe page could not be read (paywalled or blocked); using video content only.';
                 previewLinkedNote.style.display = 'block';
             } else {
@@ -625,30 +637,65 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (previewIngredients) {
             previewIngredients.innerHTML = '';
-            if (data.recipe.recipeIngredient) {
-                data.recipe.recipeIngredient.forEach(ing => {
+            if (recipe.recipeIngredient) {
+                recipe.recipeIngredient.forEach(ing => {
                     const li = document.createElement('li');
                     li.textContent = ing;
                     previewIngredients.appendChild(li);
                 });
             }
         }
-        
+
         if (previewInstructions) {
             previewInstructions.innerHTML = '';
-            if (data.recipe.recipeInstructions) {
-                data.recipe.recipeInstructions.forEach(inst => {
+            if (recipe.recipeInstructions) {
+                recipe.recipeInstructions.forEach(inst => {
                     const li = document.createElement('li');
                     li.textContent = typeof inst === 'object' ? inst.text : inst;
                     previewInstructions.appendChild(li);
                 });
             }
         }
-        
-        previewModal.style.display = 'flex';
-        document.body.style.overflow = 'hidden';
     }
-    
+
+    /**
+     * Re-run only the LLM structuring step for the recipe currently shown
+     * in the preview modal, reusing cached source material - no
+     * re-download, no re-transcription.
+     */
+    async function rerunPreviewStructuring() {
+        if (!currentUploadId) return;
+        const rerunBtn = document.getElementById('rerun-structuring-btn');
+        if (rerunBtn) rerunBtn.disabled = true;
+        showNotification('Re-running structuring...', 'info');
+
+        try {
+            const response = await fetch(`/api/pending-uploads/${currentUploadId}/rerun-structuring`, {
+                method: 'POST',
+            });
+            const data = await response.json();
+
+            if (data.error) {
+                showNotification(data.error, 'error');
+                return;
+            }
+
+            _populatePreviewFields(data.recipe);
+            showNotification('Recipe re-structured!', 'success');
+        } catch (error) {
+            console.error('Error re-running structuring:', error);
+            showNotification('Failed to re-run structuring', 'error');
+        } finally {
+            if (rerunBtn) rerunBtn.disabled = false;
+        }
+    }
+
+    const rerunStructuringBtn = document.getElementById('rerun-structuring-btn');
+    if (rerunStructuringBtn) {
+        rerunStructuringBtn.addEventListener('click', rerunPreviewStructuring);
+    }
+
+
     function selectImage(index, imageData) {
         selectedImageIndex = index;
         

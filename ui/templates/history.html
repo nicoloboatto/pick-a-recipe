@@ -104,12 +104,20 @@
                     <h4><i class="fas fa-tasks"></i> Instructions</h4>
                     <ol id="modal-instructions"></ol>
                 </div>
+
+                <details class="recipe-section" id="modal-prompt-section" style="display:none;">
+                    <summary><i class="fas fa-scroll"></i> Structuring prompt used</summary>
+                    <pre id="modal-prompt-used" style="white-space:pre-wrap; word-break:break-word;"></pre>
+                </details>
             </div>
         </div>
-        
+
         <div class="modal-footer">
             <button id="delete-recipe-btn" class="btn btn-danger">
                 <i class="fas fa-trash"></i> Delete
+            </button>
+            <button id="rerun-structuring-btn" class="btn btn-secondary" style="display:none;">
+                <i class="fas fa-redo"></i> Re-run Structuring
             </button>
             <a id="download-mela-btn" class="btn btn-primary" href="#" style="display:none;">
                 <i class="fas fa-file-download"></i> Download .melarecipe
@@ -214,6 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const reuploadBtn = document.getElementById('reupload-recipe-btn');
     const reuploadMenu = document.getElementById('reupload-menu');
     const downloadMelaBtn = document.getElementById('download-mela-btn');
+    const rerunBtn = document.getElementById('rerun-structuring-btn');
     const confirmDeleteModal = document.getElementById('confirm-delete-modal');
     const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
     const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
@@ -281,7 +290,11 @@ document.addEventListener('DOMContentLoaded', function() {
     deleteBtn.addEventListener('click', function() {
         confirmDeleteModal.style.display = 'flex';
     });
-    
+
+    rerunBtn.addEventListener('click', function() {
+        rerunStructuring(currentHistoryId);
+    });
+
     cancelDeleteBtn.addEventListener('click', function() {
         confirmDeleteModal.style.display = 'none';
     });
@@ -716,7 +729,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 reuploadBtn.style.display = 'none';
                 downloadMelaBtn.style.display = 'none';
             }
-            
+
+            const promptSection = document.getElementById('modal-prompt-section');
+            if (item.structuring_prompt_used) {
+                document.getElementById('modal-prompt-used').textContent = item.structuring_prompt_used;
+                promptSection.style.display = 'block';
+            } else {
+                promptSection.style.display = 'none';
+            }
+            rerunBtn.style.display = (item.status === 'success' && item.recipe_data) ? 'inline-flex' : 'none';
+
             recipeModal.style.display = 'flex';
             document.body.style.overflow = 'hidden';
             
@@ -841,7 +863,37 @@ document.addEventListener('DOMContentLoaded', function() {
             showNotification('Failed to re-upload recipe', 'error');
         }
     }
-    
+
+    /**
+     * Re-run only the LLM structuring step, reusing cached source material.
+     * No re-download, no re-transcription - a couple of seconds.
+     */
+    async function rerunStructuring(historyId) {
+        rerunBtn.disabled = true;
+        showNotification('Re-running structuring...', 'info');
+
+        try {
+            const response = await fetch(`/api/history/${historyId}/rerun-structuring`, {
+                method: 'POST',
+            });
+            const data = await response.json();
+
+            if (data.error) {
+                showNotification(data.error, 'error');
+                return;
+            }
+
+            showNotification('Recipe re-structured!', 'success');
+            await showRecipeDetails(historyId);
+            loadHistory();
+        } catch (error) {
+            console.error('Error re-running structuring:', error);
+            showNotification('Failed to re-run structuring', 'error');
+        } finally {
+            rerunBtn.disabled = false;
+        }
+    }
+
     /**
      * Retry failed analysis
      */

@@ -29,6 +29,7 @@ from database import (
     get_combined_history_and_jobs, get_combined_history_and_jobs_count,
     get_job, get_active_jobs,
     create_pending_upload, get_pending_upload, get_pending_uploads,
+    update_pending_upload_recipe_data,
     confirm_pending_upload, cancel_pending_upload, delete_pending_upload,
     cleanup_expired_pending_uploads, cleanup_old_jobs,
     save_push_subscription, get_push_subscriptions, delete_push_subscription,
@@ -547,6 +548,22 @@ def settings():
         config['output_target'] = request.form.get('output_target', 'tandoor')
         config['export_to_both'] = 'true' if request.form.get('export_to_both') else 'false'
         config['follow_recipe_links'] = 'true' if request.form.get('follow_recipe_links') else 'false'
+
+        # Only persist a prompt as a genuine override if it differs from the
+        # in-code default. Otherwise, leaving the seeded default text
+        # untouched and hitting Save would freeze today's default forever
+        # every time settings are saved, defeating "the default in code is
+        # the single source of truth."
+        from helpers import DEFAULT_STRUCTURING_GUIDANCE
+        from transcriber import DEFAULT_VISION_GUIDANCE
+        submitted_structuring = request.form.get('custom_structuring_prompt', '').strip()
+        config['custom_structuring_prompt'] = (
+            submitted_structuring if submitted_structuring != DEFAULT_STRUCTURING_GUIDANCE.strip() else ''
+        )
+        submitted_vision = request.form.get('custom_vision_prompt', '').strip()
+        config['custom_vision_prompt'] = (
+            submitted_vision if submitted_vision != DEFAULT_VISION_GUIDANCE.strip() else ''
+        )
         config['whisper_model'] = request.form.get('whisper_model', 'small')
         config['hf_token'] = request.form.get('hf_token', '')
         config['yt_dlp_cookies_file'] = request.form.get('yt_dlp_cookies_file', '')
@@ -562,6 +579,9 @@ def settings():
         flash('Settings saved successfully!', 'success')
         return redirect(url_for('settings'))
 
+    from helpers import DEFAULT_STRUCTURING_GUIDANCE, get_structuring_fixed_suffix
+    from transcriber import DEFAULT_VISION_GUIDANCE, get_visual_text_fixed_suffix
+
     users = list_users() if (get_user(session.get('user')) or {}).get('is_admin') else []
     return render_template(
         'settings.html',
@@ -569,6 +589,10 @@ def settings():
         users=users,
         sso_configured=oauth is not None,
         max_concurrent=resolve_max_concurrent(),
+        default_structuring_guidance=DEFAULT_STRUCTURING_GUIDANCE.strip(),
+        structuring_fixed_suffix=get_structuring_fixed_suffix(),
+        default_vision_guidance=DEFAULT_VISION_GUIDANCE.strip(),
+        vision_fixed_suffix=get_visual_text_fixed_suffix(),
     )
 
 
@@ -851,6 +875,34 @@ def download_mela_file(history_id):
     return send_file(file_path, as_attachment=True, download_name=os.path.basename(file_path))
 
 
+@app.route('/api/history/<int:history_id>/rerun-structuring', methods=['POST'])
+@api_login_required
+def rerun_structuring_api(history_id):
+    """Re-run only the LLM structuring step for a completed recipe, reusing
+    its cached transcript/on-screen-text/caption/linked-page material - no
+    re-download, no re-transcription. Lets prompt tuning be iterative."""
+    from pipeline import rerun_structuring
+    from database import update_history_recipe_data
+
+    item = get_history_entry(history_id)
+    if not item:
+        return jsonify({'error': 'History entry not found'}), 404
+
+    try:
+        result = rerun_structuring(item.get('dish_dir'), item.get('url'))
+    except FileNotFoundError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 422
+
+    update_history_recipe_data(history_id, result['recipe_data'], result['structuring_prompt_used'])
+    return jsonify({
+        'status': 'success',
+        'recipe': result['recipe_data'],
+        'structuring_prompt_used': result['structuring_prompt_used'],
+    })
+
+
 @app.route('/api/history/<int:history_id>/reupload', methods=['POST'])
 @api_login_required
 def reupload_recipe(history_id):
@@ -972,6 +1024,36 @@ def import_settings():
         'message': f'Imported {len(filtered_settings)} settings',
         'imported_keys': list(filtered_settings.keys())
     })
+
+
+@app.route('/api/settings/reset-prompt', methods=['POST'])
+@api_login_required
+def reset_prompt():
+    """Clear a custom prompt override, reverting to the in-code default.
+
+    A dedicated endpoint (rather than routing "reset" through the main
+    settings form) so resetting actually means "track whatever the in-code
+    default is" - not "copy today's default text into the saved override,"
+    which would freeze it against future upstream improvements.
+    """
+    from helpers import DEFAULT_STRUCTURING_GUIDANCE
+    from transcriber import DEFAULT_VISION_GUIDANCE
+
+    data = request.get_json() or {}
+    prompt_name = data.get('prompt')
+    key_and_default = {
+        'structuring': ('custom_structuring_prompt', DEFAULT_STRUCTURING_GUIDANCE),
+        'vision': ('custom_vision_prompt', DEFAULT_VISION_GUIDANCE),
+    }
+    if prompt_name not in key_and_default:
+        return jsonify({'error': 'Unknown prompt. Expected "structuring" or "vision".'}), 400
+
+    config_key, default_text = key_and_default[prompt_name]
+    current_config = load_config()
+    current_config[config_key] = ''
+    save_config(current_config)
+
+    return jsonify({'status': 'success', 'default_text': default_text.strip()})
 
 
 @app.route('/api/cookies/upload', methods=['POST'])
@@ -1155,8 +1237,37 @@ def get_pending_upload_api(upload_id):
                     'is_best': idx == upload.get('best_image_index', 0)
                 })
     item['candidate_images'] = candidate_images_data
-    
+
     return jsonify(item)
+
+
+@app.route('/api/pending-uploads/<upload_id>/rerun-structuring', methods=['POST'])
+@api_login_required
+def rerun_pending_upload_structuring_api(upload_id):
+    """Re-run structuring for a live, still-in-progress job sitting at the
+    confirm-before-upload step - same cached-material reuse as the History
+    version, but updates the in-flight draft rather than a committed entry."""
+    from pipeline import rerun_structuring
+
+    upload = get_pending_upload(upload_id)
+    if not upload or upload['status'] != 'pending':
+        return jsonify({'error': 'Pending upload not found'}), 404
+
+    job = get_job(upload['job_id'])
+    dish_dir = job.get('dish_dir') if job else None
+
+    try:
+        result = rerun_structuring(dish_dir, job.get('url') if job else None)
+    except FileNotFoundError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 422
+
+    update_pending_upload_recipe_data(upload_id, result['recipe_data'])
+    if upload_id in pending_uploads:
+        pending_uploads[upload_id]['recipe'] = result['recipe_data']
+
+    return jsonify({'status': 'success', 'recipe': result['recipe_data']})
 
 
 @app.route('/api/pending-uploads/<upload_id>/confirm', methods=['POST'])
@@ -1270,6 +1381,12 @@ def process_video_job(job_id, jm):
         def update(self, stage, message, percent, video_title=None):
             jm.update_progress(job_id, stage, message, percent, video_title)
 
+        def set_dish_dir(self, dish_dir):
+            # Lets a still-in-progress job (sitting at the confirm-before-upload
+            # step) be resolved to its cache folder for a live re-run.
+            from database import update_job_dish_dir
+            update_job_dish_dir(job_id, dish_dir)
+
     reporter = Reporter()
 
     preview = None
@@ -1326,6 +1443,7 @@ def process_video_job(job_id, jm):
         result.output_target,
         llm_tokens=result.llm_tokens_estimate or stats.llm_tokens_estimate,
         mela_file_path=result.mela_file_path,
+        structuring_prompt_used=result.structuring_prompt_used,
     )
 
 

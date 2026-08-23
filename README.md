@@ -163,6 +163,12 @@ All configuration is managed through the web UI settings page (`/settings`). On 
 
 Creators often link their blog post from the caption, and that page usually has the exact written recipe — better source material than a spoken transcript. When enabled (the default), Pick-a-Recipe scans the caption for links, skips social-platform and link-in-bio URLs, follows shorteners, and fetches up to three candidates until one yields usable text. It prefers schema.org `Recipe` structured data when the page has it, falling back to readability-style article extraction otherwise. Paywalls, bot-check pages, and thin/blocked content are all treated as "unavailable," never as failures: the job continues with video-derived content only, the original link is preserved on the recipe (and surfaced in Mela's Notes field), and a small note appears on the review screen and in History so you know to check the source manually if the result looks thin.
 
+### Editing prompts and re-running structuring
+
+Settings → **Prompts** exposes the wording sent to the LLM for recipe structuring and for on-screen-text extraction, without needing to edit code. Each prompt is split into an editable guidance section (a large textarea, seeded with the current default) and a fixed, read-only suffix — the JSON output contract for structuring, and the output-language directive for on-screen text — that's always appended and can't be broken by a customization. **Reset to default** clears your saved override entirely (rather than just copying today's default text back in), so it keeps tracking whatever the in-code default is even after a future update. If a custom structuring prompt causes the LLM to return unparseable output, the job fails with a message pointing at Settings → Prompts rather than crashing silently.
+
+Every completed recipe remembers the exact prompt used (viewable, collapsed, in its History detail view) and its source material (transcript, on-screen text, caption, linked page) stays cached — so **Re-run Structuring**, available both on the confirm-before-upload preview and in History, regenerates just the structured recipe from a tuned prompt in a couple of seconds, with no re-download or re-transcription. The previous result is kept for one level of recovery.
+
 ## Usage
 
 ### Web UI

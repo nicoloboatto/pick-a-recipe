@@ -176,6 +176,7 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         'retry_from_history_id': 'INTEGER',
         'llm_tokens_used': 'INTEGER DEFAULT 0',
         'queue_priority': 'INTEGER DEFAULT 0',
+        'dish_dir': 'TEXT',
     }
     for col, typedef in job_columns.items():
         try:
@@ -185,6 +186,9 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
 
     history_columns = {
         'mela_file_path': 'TEXT',
+        'dish_dir': 'TEXT',
+        'structuring_prompt_used': 'TEXT',
+        'previous_recipe_data': 'TEXT',
     }
     for col, typedef in history_columns.items():
         try:
@@ -507,6 +511,19 @@ def update_job_tokens(job_id: str, tokens: int) -> None:
         conn.commit()
 
 
+def update_job_dish_dir(job_id: str, dish_dir: str) -> None:
+    """Record where this job's cached source material (transcript, caption,
+    linked-page text) lives, so a live pending upload can be re-run without
+    re-downloading - see rerun_structuring() in pipeline.py."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE recipe_jobs SET dish_dir = ? WHERE id = ?',
+            (dish_dir, job_id),
+        )
+        conn.commit()
+
+
 def get_job(job_id: str) -> Optional[Dict[str, Any]]:
     """Get a job by ID."""
     with get_db() as conn:
@@ -624,7 +641,9 @@ def create_history_entry(job_id: str, url: str, video_title: Optional[str],
                          thumbnail_path: Optional[str], thumbnail_data: Optional[str],
                          status: str, error_message: Optional[str] = None,
                          output_target: Optional[str] = None,
-                         mela_file_path: Optional[str] = None) -> Optional[int]:
+                         mela_file_path: Optional[str] = None,
+                         dish_dir: Optional[str] = None,
+                         structuring_prompt_used: Optional[str] = None) -> Optional[int]:
     """Create a history entry for a completed/failed recipe extraction."""
     with get_db() as conn:
         cursor = conn.cursor()
@@ -632,12 +651,36 @@ def create_history_entry(job_id: str, url: str, video_title: Optional[str],
         cursor.execute('''
             INSERT INTO recipe_history
             (job_id, url, video_title, recipe_name, recipe_data, thumbnail_path,
-             thumbnail_data, status, error_message, output_target, mela_file_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             thumbnail_data, status, error_message, output_target, mela_file_path,
+             dish_dir, structuring_prompt_used)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (job_id, url, video_title, recipe_name, recipe_json, thumbnail_path,
-              thumbnail_data, status, error_message, output_target, mela_file_path))
+              thumbnail_data, status, error_message, output_target, mela_file_path,
+              dish_dir, structuring_prompt_used))
         conn.commit()
         return cursor.lastrowid
+
+
+def update_history_recipe_data(history_id: int, recipe_data: Dict, structuring_prompt_used: str) -> bool:
+    """Overwrite a history entry's recipe with a re-run structuring result,
+    keeping the prior version in previous_recipe_data (one level of undo)."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT recipe_data FROM recipe_history WHERE id = ?', (history_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        cursor.execute('''
+            UPDATE recipe_history
+            SET recipe_data = ?, recipe_name = ?, previous_recipe_data = ?,
+                structuring_prompt_used = ?
+            WHERE id = ?
+        ''', (
+            json.dumps(recipe_data), recipe_data.get('name'),
+            row['recipe_data'], structuring_prompt_used, history_id,
+        ))
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 def get_history(limit: int = 50, offset: int = 0,
@@ -1050,6 +1093,20 @@ def get_pending_upload(upload_id: str) -> Optional[Dict[str, Any]]:
                     item['image_candidates'] = []
             return item
     return None
+
+
+def update_pending_upload_recipe_data(upload_id: str, recipe_data: Dict) -> bool:
+    """Overwrite a pending upload's draft recipe with a re-run structuring
+    result. Nothing's been committed yet at this stage, so unlike the
+    History equivalent there's no previous-version tracking to do."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE pending_uploads SET recipe_data = ? WHERE id = ?',
+            (json.dumps(recipe_data), upload_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 def get_pending_uploads() -> List[Dict[str, Any]]:
