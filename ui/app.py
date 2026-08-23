@@ -875,6 +875,59 @@ def download_mela_file(history_id):
     return send_file(file_path, as_attachment=True, download_name=os.path.basename(file_path))
 
 
+@app.route('/api/history/bulk-download-mela', methods=['POST'])
+@api_login_required
+def bulk_download_mela():
+    """Download multiple Mela recipes at once.
+
+    A single qualifying recipe downloads as its plain .melarecipe file. Two
+    or more get bundled into one .melarecipe**s** archive (Mela's own
+    multi-recipe format - a zip of individual .melarecipe files) so they
+    import into Mela in one action instead of one at a time.
+    """
+    import io
+    from mela import build_melarecipes_archive
+
+    data = request.get_json() or {}
+    history_ids = data.get('history_ids') or []
+    if not history_ids:
+        return jsonify({'error': 'No recipes selected'}), 400
+
+    file_paths = []
+    skipped = 0
+    for raw_id in history_ids:
+        try:
+            item = get_history_entry(int(raw_id))
+        except (TypeError, ValueError):
+            item = None
+        path = item.get('mela_file_path') if item else None
+        if item and item.get('output_target') == 'mela' and path and os.path.exists(path):
+            file_paths.append(path)
+        else:
+            skipped += 1
+
+    if not file_paths:
+        return jsonify({
+            'error': 'None of the selected recipes have a downloadable .melarecipe file '
+                     '(only Mela-target recipes with a file still on disk can be downloaded).'
+        }), 404
+
+    if len(file_paths) == 1:
+        response = send_file(file_paths[0], as_attachment=True, download_name=os.path.basename(file_paths[0]))
+    else:
+        archive_bytes = build_melarecipes_archive(file_paths)
+        response = send_file(
+            io.BytesIO(archive_bytes),
+            as_attachment=True,
+            download_name=f'recipes-{len(file_paths)}.melarecipes',
+            mimetype='application/zip',
+        )
+
+    if skipped:
+        response.headers['X-Skipped-Count'] = str(skipped)
+    return response
+
+
 @app.route('/api/history/<int:history_id>/rerun-structuring', methods=['POST'])
 @api_login_required
 def rerun_structuring_api(history_id):

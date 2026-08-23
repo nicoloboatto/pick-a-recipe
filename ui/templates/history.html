@@ -37,6 +37,9 @@
         </span>
         <span class="stat-item bulk-actions" id="bulk-actions" style="display: none;">
             <span id="selected-count">0</span> selected
+            <button id="bulk-download-btn" class="btn btn-primary btn-sm">
+                <i class="fas fa-file-download"></i> Download Selected
+            </button>
             <button id="bulk-delete-btn" class="btn btn-danger btn-sm">
                 <i class="fas fa-trash"></i> Delete Selected
             </button>
@@ -212,6 +215,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const bulkActions = document.getElementById('bulk-actions');
     const selectedCountSpan = document.getElementById('selected-count');
     const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+    const bulkDownloadBtn = document.getElementById('bulk-download-btn');
     const selectAllBtn = document.getElementById('select-all-btn');
     const clearSelectionBtn = document.getElementById('clear-selection-btn');
     
@@ -309,7 +313,9 @@ document.addEventListener('DOMContentLoaded', function() {
         bulkDeleteCountSpan.textContent = selectedItems.size;
         confirmBulkDeleteModal.style.display = 'flex';
     });
-    
+
+    bulkDownloadBtn.addEventListener('click', bulkDownloadMela);
+
     selectAllBtn.addEventListener('click', function() {
         allItems.forEach(item => {
             const key = getItemKey(item);
@@ -794,6 +800,65 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    /**
+     * Download selected Mela recipes - one plain .melarecipe file if a
+     * single recipe qualifies, or one merged .melarecipes archive (Mela's
+     * own multi-recipe import format) if more than one does. Non-Mela or
+     * job-in-progress selections are silently skipped with a note.
+     */
+    async function bulkDownloadMela() {
+        const historyIds = [];
+        selectedItems.forEach(key => {
+            if (key.startsWith('history_')) {
+                historyIds.push(parseInt(key.replace('history_', '')));
+            }
+        });
+
+        if (historyIds.length === 0) {
+            showNotification('Select at least one completed recipe to download', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/history/bulk-download-mela', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ history_ids: historyIds }),
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                showNotification(data.error || 'Failed to download recipes', 'error');
+                return;
+            }
+
+            const blob = await response.blob();
+            const disposition = response.headers.get('Content-Disposition') || '';
+            const match = disposition.match(/filename="?([^";]+)"?/);
+            const filename = match ? match[1] : 'recipes.melarecipes';
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            const skipped = response.headers.get('X-Skipped-Count');
+            showNotification(
+                skipped
+                    ? `Downloaded ${filename} (${skipped} non-Mela or missing-file recipe(s) skipped)`
+                    : `Downloaded ${filename}`,
+                'success'
+            );
+        } catch (error) {
+            console.error('Error downloading recipes:', error);
+            showNotification('Failed to download recipes', 'error');
+        }
+    }
+
     /**
      * Bulk delete items
      */
