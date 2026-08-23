@@ -86,6 +86,54 @@ def coerce_num(val: str) -> float:
         return 0
 
 
+_TITLE_CASE_MINOR_WORDS = {
+    "a", "an", "and", "as", "at", "but", "by", "en", "for", "if", "in",
+    "nor", "of", "on", "or", "per", "the", "to", "v", "via", "vs", "with",
+}
+
+
+def _title_case_word(word: str) -> str:
+    """Capitalize a single hyphen-free word: uppercase the first letter,
+    lowercase the rest. Avoids str.title()'s mishandling of apostrophes
+    (e.g. "chicken's" -> "Chicken'S")."""
+    if not word:
+        return word
+    return word[0].upper() + word[1:].lower()
+
+
+def to_title_case(text: str) -> str:
+    """Title-case a recipe title deterministically - no LLM inference needed.
+
+    Capitalizes each word (each side of a hyphen too, e.g. "stir-fry" ->
+    "Stir-Fry"), keeping short English connector words lowercase unless
+    they're the first or last word ("Chicken and Rice", not "Chicken And
+    Rice"). Safe on non-Latin scripts (Hebrew, Arabic, etc.): they have no
+    case distinction, so this passes through unchanged.
+
+    Examples:
+        >>> to_title_case("crispy curry chicken sandwiches")
+        'Crispy Curry Chicken Sandwiches'
+        >>> to_title_case("mac and cheese")
+        'Mac and Cheese'
+    """
+    if not text or not text.strip():
+        return text
+
+    words = text.split(" ")
+    last_index = len(words) - 1
+    result = []
+    for idx, word in enumerate(words):
+        if not word:
+            result.append(word)
+            continue
+        core = word.lower().strip(".,!?;:'\"()[]")
+        if idx not in (0, last_index) and core in _TITLE_CASE_MINOR_WORDS:
+            result.append(word.lower())
+        else:
+            result.append("-".join(_title_case_word(part) for part in word.split("-")))
+    return " ".join(result)
+
+
 def parse_nutrition_value(value: str | None) -> float:
     """Extract numeric value from nutrition string like '450 kcal' or '20 g'.
     

@@ -16,6 +16,10 @@
 
 - **Duplicate "Recently Completed" Cards**: Every job/preview socket event (`job_progress`, `job_complete`, `job_failed`, `job_cancelled`, `recipe_preview`, `recipe_cancelled`) was emitted twice — once scoped to the job's room, once as a global broadcast. Since a plain `socketio.emit()` with no room already reaches every connected client (room membership included), the room-scoped emit was pure redundancy: a client that also joined the room (as the main page always does) received each event twice, producing a duplicate completed-recipe card, duplicate notifications, etc. Removed the redundant room-scoped emits, keeping only the broadcast.
 
+### Improvements
+
+- **Deterministic Title Case**: Recipe titles are now normalized to title case in code (`helpers.to_title_case()`), not left to the LLM — mechanical formatting isn't inference material. Handles apostrophes correctly (unlike `str.title()`), hyphenated words ("Air-Fried"), and common connector words ("Chicken with Rice", not "Chicken With Rice"). Applied once in `chef.py`'s postprocessing, so it covers both the initial extraction and Re-run Structuring.
+
 ## [1.4.0] - 2026-01-21
 
 ### New Features

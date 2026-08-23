@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from config import config
-from helpers import get_recipe_system_prompt, get_yield_nutrition_prompt, setup_logger
+from helpers import get_recipe_system_prompt, get_yield_nutrition_prompt, setup_logger, to_title_case
 from llm_resilience import call_with_model_fallback
 
 logger = setup_logger(__name__)
@@ -99,6 +99,12 @@ class Chef:
         dp = data.get("datePublished")
         if not isinstance(dp, str) or len(dp) <= 10:
             data["datePublished"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Title case is mechanical, not inference - enforce it in code rather
+        # than relying on the LLM to get it consistently right.
+        name = data.get("name")
+        if isinstance(name, str) and name.strip():
+            data["name"] = to_title_case(name.strip())
 
         # --- Clean and deduplicate recipeIngredients ---
         ingredients = data.get("recipeIngredients") or []
