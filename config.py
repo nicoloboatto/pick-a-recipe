@@ -76,7 +76,7 @@ migrate_legacy_database()
 DEFAULT_CONFIG = {
     "llm_provider": "openai",
     "openai_api_key": "",
-    "openai_model": "gpt-5-mini-2025-08-07",
+    "openai_model": "gpt-5.6-terra",
     "gemini_api_key": "",
     "gemini_model": "gemini-2.5-flash",
     "recipe_lang": "hebrew",

@@ -20,8 +20,13 @@ logger = setup_logger(__name__)
 
 
 # Per-provider fallback chains, most-preferred first.
+# openai: gpt-5-mini-2025-08-07 (the old default) shuts down 2026-12-11 per
+# OpenAI's own deprecations page, which names gpt-5.6-terra as its
+# replacement - same mid-tier cost/quality position. gpt-5.6-sol (flagship)
+# is the fallback-up for when terra is unavailable; gpt-4o is kept as a
+# last-resort older-generation baseline (not currently listed for shutdown).
 FALLBACK_MODELS = {
-    "openai": ["gpt-5-mini-2025-08-07", "gpt-4o-mini", "gpt-4o"],
+    "openai": ["gpt-5.6-terra", "gpt-5.6-sol", "gpt-4o"],
     "gemini": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
 }
 

@@ -140,7 +140,7 @@ All configuration is managed through the web UI settings page (`/settings`). On 
 |---------|-------------|
 | **LLM Provider** | Choose between OpenAI or Google Gemini |
 | **OpenAI API Key** | Your OpenAI API key (required if using OpenAI) |
-| **OpenAI Model** | Model to use (default: `gpt-5-mini-2025-08-07`) |
+| **OpenAI Model** | Model to use (default: `gpt-5.6-terra`) |
 | **Gemini API Key** | Your Google Gemini API key (required if using Gemini) |
 | **Gemini Model** | Model to use (default: `gemini-2.5-flash`) |
 | **Recipe Language** | Target language for recipe output (e.g., `hebrew`, `english`) |

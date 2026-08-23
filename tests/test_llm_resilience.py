@@ -12,6 +12,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from llm_resilience import (  # noqa: E402
+    FALLBACK_MODELS,
     ModelUnavailableError,
     call_with_model_fallback,
     candidate_models,
@@ -54,7 +55,10 @@ class CandidateModelsTests(unittest.TestCase):
     def test_custom_model_prepended_to_fallbacks(self):
         cands = candidate_models("openai", "gpt-custom")
         self.assertEqual(cands[0], "gpt-custom")
-        self.assertIn("gpt-4o-mini", cands)
+        # Whatever the current fallback chain is - not tied to a specific
+        # model name, since that list gets updated as OpenAI's lineup does.
+        for model in FALLBACK_MODELS["openai"]:
+            self.assertIn(model, cands)
 
     def test_no_duplicates(self):
         cands = candidate_models("gemini", "gemini-2.5-flash")
