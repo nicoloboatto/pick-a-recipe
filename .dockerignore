@@ -32,3 +32,7 @@ tmp/
 
 # Plans
 plans/
+
+# Frontend build artifacts (rebuilt inside the image via node-build stage)
+ui/frontend/node_modules
+ui/frontend/dist

@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, make_response
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, make_response, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
 from database import (
@@ -43,17 +43,31 @@ if os.environ.get('TRUST_PROXY', 'true').lower() in ('true', '1', 'yes'):
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-# Serve manifest.json with correct MIME type and headers for PWA
+# Path to the Vite SPA build output (ui/frontend/dist/)
+FRONTEND_DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'frontend', 'dist')
+
 @app.route('/manifest.json')
 def serve_manifest():
+    dist_manifest = os.path.join(FRONTEND_DIST, 'manifest.webmanifest')
+    if os.path.exists(dist_manifest):
+        response = make_response(send_from_directory(FRONTEND_DIST, 'manifest.webmanifest'))
+        response.headers['Content-Type'] = 'application/manifest+json'
+        response.headers['Cache-Control'] = 'public, max-age=3600'
+        return response
     response = make_response(app.send_static_file('manifest.json'))
     response.headers['Content-Type'] = 'application/manifest+json'
     response.headers['Cache-Control'] = 'public, max-age=3600'
     return response
 
-# Serve service worker with correct MIME type and scope
 @app.route('/sw.js')
 def serve_sw():
+    dist_sw = os.path.join(FRONTEND_DIST, 'sw.js')
+    if os.path.exists(dist_sw):
+        response = make_response(send_from_directory(FRONTEND_DIST, 'sw.js'))
+        response.headers['Content-Type'] = 'application/javascript'
+        response.headers['Service-Worker-Allowed'] = '/'
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return response
     response = make_response(app.send_static_file('sw.js'))
     response.headers['Content-Type'] = 'application/javascript'
     response.headers['Service-Worker-Allowed'] = '/'
@@ -278,12 +292,9 @@ _run_cleanup_scheduler()
 @app.route('/')
 @login_required
 def index():
-    """Main page with URL input and progress display."""
-    # Check for shared URL from multiple sources:
-    # 1. Session (set by /share route for POST requests)
-    # 2. shared_url query param (from service worker redirect)
-    # 3. shared_text query param (from service worker redirect)
-    # 4. url/text query params (legacy/direct)
+    if os.path.exists(os.path.join(FRONTEND_DIST, 'index.html')):
+        return send_from_directory(FRONTEND_DIST, 'index.html')
+
     shared_url = (
         session.pop('shared_url', None) or
         request.args.get('shared_url') or
@@ -293,14 +304,13 @@ def index():
         ''
     )
     auto_from_share = session.pop('auto_start_extraction', False)
-    
-    # Extract URL from shared text if needed (apps like TikTok share URLs in text)
+
     if shared_url and not shared_url.startswith('http'):
         import re
         url_match = re.search(r'(https?://[^\s]+)', shared_url)
         if url_match:
             shared_url = url_match.group(1)
-    
+
     return render_template(
         'index.html',
         shared_url=shared_url,
@@ -315,7 +325,9 @@ def index():
 @app.route('/jobs/<job_id>')
 @login_required
 def job_detail(job_id):
-    """Dedicated progress page for a single job."""
+    if os.path.exists(os.path.join(FRONTEND_DIST, 'index.html')):
+        return send_from_directory(FRONTEND_DIST, 'index.html')
+
     job = get_job(job_id)
     if not job:
         flash('Job not found', 'error')
@@ -326,7 +338,8 @@ def job_detail(job_id):
 @app.route('/tasks')
 @login_required
 def tasks_page():
-    """Tasks dashboard: queue, running and approval-parked jobs."""
+    if os.path.exists(os.path.join(FRONTEND_DIST, 'index.html')):
+        return send_from_directory(FRONTEND_DIST, 'index.html')
     return render_template('tasks.html')
 
 
@@ -384,6 +397,9 @@ def login():
     """Login page — single sign-on via Authentik."""
     if _is_logged_in():
         return redirect(url_for('index'))
+    spa_login = os.path.join(FRONTEND_DIST, 'index.html')
+    if os.path.exists(spa_login):
+        return send_from_directory(FRONTEND_DIST, 'index.html')
     return render_template('login.html', sso_enabled=oauth is not None)
 
 
@@ -968,6 +984,47 @@ def reupload_recipe(history_id):
                 pass
 
 
+# ===== SPA Support API Endpoints =====
+
+@app.route('/api/me', methods=['GET'])
+@api_login_required
+def api_me():
+    return jsonify({
+        'user': session['user'],
+        'is_admin': bool(session.get('is_admin', False)),
+        'shared_url': session.pop('shared_url', None),
+        'auto_start': bool(session.pop('auto_start_extraction', False)),
+    })
+
+
+@app.route('/api/auth/status', methods=['GET'])
+def api_auth_status():
+    return jsonify({'sso_enabled': oauth is not None})
+
+
+@app.route('/api/config', methods=['GET'])
+@api_login_required
+def api_get_config():
+    return jsonify(load_config())
+
+
+@app.route('/api/config', methods=['POST'])
+@api_login_required
+def api_post_config():
+    from config import DEFAULT_CONFIG
+    data = request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({'error': 'JSON object required'}), 400
+    valid_keys = set(DEFAULT_CONFIG.keys())
+    filtered = {k: v for k, v in data.items() if k in valid_keys}
+    if not filtered:
+        return jsonify({'error': 'No valid configuration keys provided'}), 400
+    current = load_config()
+    current.update(filtered)
+    save_config(current)
+    return jsonify({'status': 'success', 'saved_keys': list(filtered.keys())})
+
+
 # ===== Settings Export/Import API Endpoints =====
 
 @app.route('/api/settings/export', methods=['GET'])
@@ -1514,6 +1571,21 @@ def _reemit_parked_previews() -> None:
 
 
 _reemit_parked_previews()
+
+
+# ===== SPA Catch-All Route =====
+# Must be registered AFTER every explicit route so those keep precedence.
+
+@app.route('/<path:path>')
+def spa_catch_all(path):
+    if path.startswith('api/'):
+        return jsonify({'error': 'Not found'}), 404
+    full_path = os.path.join(FRONTEND_DIST, path)
+    if os.path.isfile(full_path):
+        return send_from_directory(FRONTEND_DIST, path)
+    if os.path.exists(os.path.join(FRONTEND_DIST, 'index.html')):
+        return send_from_directory(FRONTEND_DIST, 'index.html')
+    return jsonify({'error': 'Not found'}), 404
 
 
 if __name__ == '__main__':

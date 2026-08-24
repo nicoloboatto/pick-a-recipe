@@ -1,3 +1,17 @@
+# ── Stage 1: build the React SPA ─────────────────────────────────────────────
+FROM node:22-alpine AS node-build
+
+WORKDIR /build
+
+# Install dependencies (leverages layer cache when package files unchanged)
+COPY ui/frontend/package*.json ./
+RUN npm ci
+
+# Copy source and build
+COPY ui/frontend/ ./
+RUN npm run build
+
+# ── Stage 2: Python application ───────────────────────────────────────────────
 FROM python:3.11-slim
 
 # Install system dependencies for faster-whisper and video processing
@@ -22,6 +36,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
+
+# Overlay the freshly-built SPA from the node-build stage
+COPY --from=node-build /build/dist /app/ui/frontend/dist
 
 # Expose the web UI port
 EXPOSE 5006

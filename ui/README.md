@@ -4,11 +4,40 @@ A modern web interface for the Pick-a-Recipe video recipe extractor.
 
 ## Features
 
-- 🔐 **Simple Authentication** - Secure login with username/password
+- 🔐 **Authentik SSO (OIDC)** — no local passwords
 - 📹 **URL Input** - Paste video URLs from TikTok, YouTube, Instagram, etc.
 - 📊 **Real-time Progress** - Watch the extraction process with live updates
 - ⚙️ **Configuration Management** - Save all settings through the web interface
-- 🎨 **Modern Dark Theme** - Beautiful, responsive UI
+- 🎨 **shadcn/ui design system** — dark-first theming with light mode, React + Tailwind v4
+- 📱 **PWA** — installable, Android share-target, web push notifications
+
+## Architecture
+
+The frontend is a React SPA (`frontend/`, Vite + TypeScript + Tailwind CSS v4 +
+shadcn/ui components) talking to the Flask backend over its JSON API and
+Socket.IO. Flask serves the compiled SPA from `frontend/dist/` and falls back
+to the legacy Jinja templates in `templates/` when no build exists, so older
+deployments keep working without Node.
+
+Design tokens follow the shadcn convention (CSS custom properties on `:root`
+and `.dark`), which keeps the palette portable for future native apps.
+
+## Frontend development
+
+```bash
+cd ui/frontend
+npm install
+npm run dev        # dev server on :5173, proxies API/socket/auth to :5006
+npm run build      # production build into dist/
+```
+
+Run the Flask server alongside it during development:
+
+```bash
+cd ui && python app.py   # serves API on :5006
+```
+
+Conventions live in `frontend/FRONTEND_SPEC.md`.
 
 ## Installation
 
@@ -67,18 +96,17 @@ All settings can be configured through the web interface by clicking the gear ic
 
 ```
 ui/
-├── app.py                 # Flask application with SocketIO
-├── database.py            # SQLite database module
-├── templates/
-│   ├── base.html         # Base template with sidebar navigation
-│   ├── index.html        # Main page with URL input and progress
-│   ├── login.html        # Login page
-│   └── settings.html     # Settings/configuration page
-└── static/
-    ├── css/
-    │   └── style.css     # All styling
-    └── js/
-        └── main.js       # Frontend JavaScript for progress tracking
+├── app.py                 # Flask app: routes, OIDC auth, REST API, Socket.IO, SPA serving
+├── database.py            # SQLite persistence (jobs, history, config, push subs)
+├── job_manager.py         # Job queue, concurrency, approval flow
+├── frontend/              # React SPA (Vite + TS + Tailwind v4 + shadcn/ui)
+│   ├── FRONTEND_SPEC.md   # Frontend conventions & API contract notes
+│   ├── src/pages/         # login / home / job / tasks / settings
+│   ├── src/components/    # shared UI (JobCard, RecipeView, ImagePicker) + ui/* primitives
+│   ├── src/lib/           # typed API client + Socket.IO hooks
+│   └── dist/              # production build served by Flask (generated)
+├── templates/             # Legacy Jinja fallback (used only when dist/ is absent)
+└── static/                # Legacy CSS/JS/icons (same fallback)
 ```
 
 ## Database

@@ -168,3 +168,7 @@ scripts/jq
 
 # Flask secret key (auto-generated for session persistence)
 .flask_secret_key
+
+# React SPA build artifacts
+ui/frontend/node_modules/
+ui/frontend/dist/
