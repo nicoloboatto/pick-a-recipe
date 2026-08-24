@@ -135,6 +135,15 @@ def init_db():
             "WHERE key = 'gemini_model' AND value IN ('gemini-2.0-flash', 'gemini-2.0-flash-lite')",
             (DEFAULT_CONFIG['gemini_model'],)
         )
+
+        # Same for OpenAI: gpt-5-mini-2025-08-07 (the old default) shuts down
+        # 2026-12-11 per OpenAI's deprecations page, so rewrite it to the
+        # current default the same way.
+        cursor.execute(
+            "UPDATE config SET value = ?, updated_at = CURRENT_TIMESTAMP "
+            "WHERE key = 'openai_model' AND value = 'gpt-5-mini-2025-08-07'",
+            (DEFAULT_CONFIG['openai_model'],)
+        )
         conn.commit()
 
 
