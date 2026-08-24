@@ -4,7 +4,7 @@ from typing import Any
 
 from ai_providers import AiSession
 from config import config
-from helpers import get_recipe_system_prompt, get_web_recipe_system_prompt, get_yield_nutrition_prompt, setup_logger
+from helpers import get_recipe_system_prompt, get_web_recipe_system_prompt, get_yield_nutrition_prompt, setup_logger, to_title_case
 from recipe_schema import (
     NUTRITION_JSON_SCHEMA,
     RECIPE_JSON_SCHEMA,
@@ -228,6 +228,12 @@ class Chef:
         )
 
     def _postprocess_recipe(self, data: dict, source_url: str | None) -> dict:
+        # Mechanical formatting isn't inference material - normalize the
+        # title in code rather than leaving it to the LLM to get right. Only
+        # here, on model output: a name the user typed in the preview stays.
+        name = data.get("name")
+        if isinstance(name, str) and name.strip():
+            data["name"] = to_title_case(name.strip())
         return postprocess_recipe(data, source_url or self.source_url)
 
     def create_recipe(self, *, source_url: str | None = None, max_retries: int = 3) -> dict:
