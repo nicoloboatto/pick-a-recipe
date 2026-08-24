@@ -172,3 +172,6 @@ scripts/jq
 # React SPA build artifacts
 ui/frontend/node_modules/
 ui/frontend/dist/
+
+# ui/frontend/src/lib is SPA source code, not a Python venv lib/
+!ui/frontend/src/lib/
