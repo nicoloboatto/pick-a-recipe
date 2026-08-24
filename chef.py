@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from config import config
-from helpers import get_recipe_system_prompt, get_web_recipe_system_prompt, get_yield_nutrition_prompt, setup_logger
+from helpers import get_recipe_system_prompt, get_web_recipe_system_prompt, get_yield_nutrition_prompt, setup_logger, to_title_case
 from llm_resilience import call_with_model_fallback
 
 logger = setup_logger(__name__)
@@ -94,6 +94,12 @@ class Chef:
         data.setdefault("@type", "Recipe")
         data.setdefault("url", source_url or self.source_url)
         data.setdefault("video", {"@type": "VideoObject", "url": source_url or self.source_url})
+
+        # Mechanical formatting isn't inference material - normalize the
+        # title in code rather than leaving it to the LLM to get right.
+        name = data.get("name")
+        if isinstance(name, str) and name.strip():
+            data["name"] = to_title_case(name.strip())
 
         # Ensure valid date
         dp = data.get("datePublished")
