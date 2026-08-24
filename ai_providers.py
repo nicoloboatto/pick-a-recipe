@@ -42,7 +42,7 @@ API_TYPES: dict[str, dict[str, Any]] = {
         "default_base_url": "",
         # models.dev provider id used to suggest model names in Settings.
         "catalog": "openai",
-        "example_model": "gpt-5-mini-2025-08-07",
+        "example_model": "gpt-5.6-terra",
         "key_placeholder": "sk-...",
         "key_hint": (
             "Create a secret key on the OpenAI platform. A ChatGPT "

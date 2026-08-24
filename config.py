@@ -90,7 +90,7 @@ DEFAULT_CONFIG = {
     # the provider it was set up with.
     "llm_provider": "openai",
     "openai_api_key": "",
-    "openai_model": "gpt-5-mini-2025-08-07",
+    "openai_model": "gpt-5.6-terra",
     "gemini_api_key": "",
     "gemini_model": "gemini-3.6-flash",
     "openrouter_api_key": "",

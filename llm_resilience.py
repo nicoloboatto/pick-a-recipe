@@ -28,7 +28,10 @@ logger = setup_logger(__name__)
 # a 404 on the next - so a failed model falls through to a clear error instead
 # of a second, equally wrong guess.
 FALLBACK_MODELS = {
-    "openai": ["gpt-5-mini-2025-08-07", "gpt-4o-mini", "gpt-4o"],
+    # gpt-5-mini-2025-08-07 (the old default) shuts down 2026-12-11 per
+    # OpenAI's deprecations page, which names gpt-5.6-terra as its
+    # replacement; gpt-5.6-sol is the step up and gpt-4o a last resort.
+    "openai": ["gpt-5.6-terra", "gpt-5.6-sol", "gpt-4o"],
     # 2.5 models 404 for projects that have not used them before. 3.6 Flash is
     # the model new Gemini API users can call; 3.8 and 3.5 Flash-Lite are the
     # other current ids Google documents for new projects.

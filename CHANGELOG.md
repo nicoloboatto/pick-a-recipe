@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Bug Fixes
+
+- **OpenAI default model retiring**: `gpt-5-mini-2025-08-07` (the previous default) has an official shutdown date of 2026-12-11 per OpenAI's deprecations page, which names `gpt-5.6-terra` as its replacement. Updated the default and the resilience fallback chain (`gpt-5.6-terra` → `gpt-5.6-sol` → `gpt-4o`), and added a one-time DB migration so existing installs still pointing at the old model get moved over automatically, the same way the earlier Gemini model retirement was handled.
+
 ## [1.4.0] - 2026-01-21
 
 ### New Features
