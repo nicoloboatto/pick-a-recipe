@@ -4,7 +4,7 @@ A modern web interface for the Pick-a-Recipe video recipe extractor.
 
 ## Features
 
-- 🔐 **Authentik SSO (OIDC)** — no local passwords
+- 🔐 **Local Login + Authentik SSO (OIDC)** — username/password by default, with optional SSO
 - 📹 **URL Input** - Paste video URLs from TikTok, YouTube, Instagram, etc.
 - 📊 **Real-time Progress** - Watch the extraction process with live updates
 - ⚙️ **Configuration Management** - Save all settings through the web interface
@@ -132,7 +132,7 @@ The UI uses Socket.IO for real-time progress updates. The stages are:
 
 ## Security Notes
 
-- Authentication is delegated to Authentik single sign-on (OIDC) — no local passwords
-- Access requires membership in the configured Authentik user group; admin features require the admin group
+- Passwords are hashed using bcrypt
+- Authentik single sign-on (OIDC) is available as an optional alternative to local login; access via SSO requires membership in the configured Authentik user group, admin features require the admin group
 - Session management uses Flask's secure sessions
 - API keys are stored in the local configuration file

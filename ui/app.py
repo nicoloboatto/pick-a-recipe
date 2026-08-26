@@ -20,7 +20,10 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 
 from database import (
     init_db, load_config, save_config,
-    get_user, upsert_oidc_user,
+    verify_user, update_password,
+    get_user, get_user_by_email, upsert_oidc_user,
+    list_users, delete_user,
+    user_must_change_password, clear_must_change_password,
     get_history, get_history_entry, get_history_count, delete_history_entry,
     delete_history_entries_bulk, delete_job_entry, delete_jobs_bulk,
     get_combined_history_and_jobs, get_combined_history_and_jobs_count,
@@ -226,6 +229,9 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         if not _is_logged_in():
             return redirect(url_for('login'))
+        if user_must_change_password(session['user']):
+            if request.endpoint not in ('setup_password', 'logout', 'static'):
+                return redirect(url_for('setup_password'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -236,6 +242,8 @@ def api_login_required(f):
     def decorated_function(*args, **kwargs):
         if not _is_logged_in():
             return jsonify({'error': 'Authentication required'}), 401
+        if user_must_change_password(session['user']):
+            return jsonify({'error': 'Password change required', 'redirect': '/setup-password'}), 403
         return f(*args, **kwargs)
     return decorated_function
 
@@ -392,15 +400,81 @@ def share():
     return redirect(url_for('index'))
 
 
-@app.route('/login')
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page — single sign-on via Authentik."""
+    """Login page.
+
+    Always serves the server-rendered local-login form (login.html), not
+    the React SPA's own login page - local username/password auth has
+    nowhere to live in the SPA yet, so this deliberately bypasses the SPA
+    for this one route rather than making local auth unreachable in a
+    built-frontend deployment.
+    """
     if _is_logged_in():
+        if user_must_change_password(session['user']):
+            return redirect(url_for('setup_password'))
         return redirect(url_for('index'))
-    spa_login = os.path.join(FRONTEND_DIST, 'index.html')
-    if os.path.exists(spa_login):
-        return send_from_directory(FRONTEND_DIST, 'index.html')
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        remember_me = request.form.get('remember_me') == 'on'
+
+        if verify_user(username, password):
+            user = get_user(username)
+            session['user'] = username
+            session['is_admin'] = bool(user and user.get('is_admin'))
+            if remember_me:
+                session.permanent = True
+            if user_must_change_password(username):
+                flash('Please set a new password before continuing.', 'warning')
+                return redirect(url_for('setup_password'))
+            flash('Login successful!', 'success')
+            return redirect(url_for('index'))
+        flash('Invalid username or password', 'error')
+
     return render_template('login.html', sso_enabled=oauth is not None)
+
+
+@app.route('/setup-password', methods=['GET', 'POST'])
+def setup_password():
+    """Force password change for default or flagged accounts."""
+    if not _is_logged_in():
+        return redirect(url_for('login'))
+
+    username = session['user']
+    user = get_user(username)
+    if not user:
+        return redirect(url_for('logout'))
+
+    if request.method == 'POST':
+        new_password = request.form.get('new_password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        current_password = request.form.get('current_password', '')
+
+        # The default admin's first-login flow accepts the known default
+        # password (or a blank field) in place of "current password" - there's
+        # no other password to verify against yet.
+        if username == 'admin' and current_password in ('', 'admin123'):
+            pass
+        elif not verify_user(username, current_password):
+            flash('Current password is incorrect', 'error')
+            return render_template('setup_password.html', user=user)
+
+        if new_password != confirm_password:
+            flash('Passwords do not match', 'error')
+        elif len(new_password) < 8:
+            flash('Password must be at least 8 characters', 'error')
+        else:
+            update_password(username, new_password)
+            clear_must_change_password(username)
+            cfg = load_config()
+            if cfg.get('allow_registration', 'true') == 'true':
+                save_config({**cfg, 'allow_registration': 'false'})
+            flash('Password updated! New registrations are now disabled.', 'success')
+            return redirect(url_for('index'))
+
+    return render_template('setup_password.html', user=user)
 
 
 def _authentik_redirect_uri() -> str:
@@ -462,6 +536,14 @@ def auth_callback():
         or sub
     )
 
+    email = userinfo.get('email')
+    is_known_user = get_user_by_email(email) is not None if email else False
+    if not is_known_user:
+        cfg = load_config()
+        if cfg.get('allow_registration', 'true') != 'true':
+            flash('Registration is disabled. Contact the administrator.', 'error')
+            return redirect(url_for('login'))
+
     pending_shared_url = session.get('shared_url')
     pending_auto_start = session.get('auto_start_extraction')
 
@@ -484,6 +566,8 @@ def auth_callback():
     if pending_auto_start:
         session['auto_start_extraction'] = True
 
+    if user_must_change_password(user['username']):
+        return redirect(url_for('setup_password'))
     flash(f"Welcome, {user.get('name') or user['username']}!", 'success')
     return redirect(url_for('index'))
 
@@ -554,6 +638,7 @@ def settings():
         config['confirm_before_upload'] = 'true' if request.form.get(
             'confirm_before_upload') else 'false'
         config['max_concurrent_jobs'] = request.form.get('max_concurrent_jobs', '3')
+        config['allow_registration'] = 'true' if request.form.get('allow_registration') else 'false'
 
         save_config(config)
         get_job_manager().refresh_concurrency()
@@ -563,15 +648,42 @@ def settings():
     from helpers import DEFAULT_STRUCTURING_GUIDANCE, get_structuring_fixed_suffix
     from transcriber import DEFAULT_VISION_GUIDANCE, get_visual_text_fixed_suffix
 
+    users = list_users() if (get_user(session.get('user')) or {}).get('is_admin') else []
     return render_template(
         'settings.html',
         config=config,
+        users=users,
+        sso_configured=oauth is not None,
         max_concurrent=resolve_max_concurrent(),
         default_structuring_guidance=DEFAULT_STRUCTURING_GUIDANCE.strip(),
         structuring_fixed_suffix=get_structuring_fixed_suffix(),
         default_vision_guidance=DEFAULT_VISION_GUIDANCE.strip(),
         vision_fixed_suffix=get_visual_text_fixed_suffix(),
     )
+
+
+@app.route('/change-password', methods=['POST'])
+@login_required
+def change_password():
+    """Change user password."""
+    current_password = request.form.get('current_password', '')
+    new_password = request.form.get('new_password', '')
+    confirm_password = request.form.get('confirm_password', '')
+
+    username = session['user']
+
+    if not verify_user(username, current_password):
+        flash('Current password is incorrect', 'error')
+    elif new_password != confirm_password:
+        flash('New passwords do not match', 'error')
+    elif len(new_password) < 6:
+        flash('Password must be at least 6 characters', 'error')
+    else:
+        update_password(username, new_password)
+        clear_must_change_password(username)
+        flash('Password changed successfully!', 'success')
+
+    return redirect(url_for('settings'))
 
 
 # ===== Job API Endpoints =====
@@ -1460,6 +1572,19 @@ def push_unsubscribe():
     if endpoint:
         delete_push_subscription(endpoint)
     return jsonify({'status': 'unsubscribed'})
+
+
+@app.route('/api/users/<username>', methods=['DELETE'])
+@api_login_required
+def delete_user_api(username):
+    me = get_user(session['user'])
+    if not me or not me.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    if username == session['user']:
+        return jsonify({'error': 'Cannot delete yourself'}), 400
+    if delete_user(username):
+        return jsonify({'status': 'deleted'})
+    return jsonify({'error': 'User not found'}), 404
 
 
 @app.route('/api/process', methods=['POST'])
