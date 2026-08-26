@@ -1008,6 +1008,34 @@ def reupload_recipe(history_id):
                 pass
 
 
+@app.route('/api/history/<int:history_id>/rerun-structuring', methods=['POST'])
+@api_login_required
+def rerun_structuring_api(history_id):
+    """Re-run only the LLM structuring step for a completed recipe, reusing
+    its cached transcript/on-screen-text/caption/linked-page material - no
+    re-download, no re-transcription. Lets prompt tuning be iterative."""
+    from pipeline import rerun_structuring
+    from database import update_history_recipe_data
+
+    item = get_history_entry(history_id)
+    if not item:
+        return jsonify({'error': 'History entry not found'}), 404
+
+    try:
+        result = rerun_structuring(item.get('dish_dir'), item.get('url'))
+    except FileNotFoundError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 422
+
+    update_history_recipe_data(history_id, result['recipe_data'], result['structuring_prompt_used'])
+    return jsonify({
+        'status': 'success',
+        'recipe': result['recipe_data'],
+        'structuring_prompt_used': result['structuring_prompt_used'],
+    })
+
+
 # ===== SPA Support API Endpoints =====
 
 @app.route('/api/me', methods=['GET'])
@@ -1325,6 +1353,34 @@ def get_pending_upload_api(upload_id):
     return jsonify(item)
 
 
+@app.route('/api/pending-uploads/<upload_id>/rerun-structuring', methods=['POST'])
+@api_login_required
+def rerun_pending_upload_structuring_api(upload_id):
+    """Re-run structuring for a live, still-in-progress job sitting at the
+    confirm-before-upload step - same cached-material reuse as the History
+    version, but updates the in-flight draft rather than a committed entry."""
+    from pipeline import rerun_structuring
+    from database import update_pending_upload_recipe_data
+
+    user_id, is_admin = _scope()
+    upload = get_pending_upload(upload_id, user_id=user_id, is_admin=is_admin)
+    if not upload or upload['status'] != 'pending':
+        return jsonify({'error': 'Pending upload not found'}), 404
+
+    job = get_job(upload['job_id'])
+    dish_dir = job.get('dish_dir') if job else None
+
+    try:
+        result = rerun_structuring(dish_dir, job.get('url') if job else None)
+    except FileNotFoundError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 422
+
+    update_pending_upload_recipe_data(upload_id, result['recipe_data'])
+    return jsonify({'status': 'success', 'recipe': result['recipe_data']})
+
+
 @app.route('/api/pending-uploads/<upload_id>/confirm', methods=['POST'])
 @api_login_required
 def confirm_pending_upload_api(upload_id):
@@ -1482,7 +1538,12 @@ def resume_upload_job(job_id: str, jm) -> None:
         jm.update_progress(job_id, 'complete',
                            f'Recipe uploaded successfully to {final_target}!', 100)
 
-    jm.complete_job(job_id, recipe_data, image_path, final_target)
+    # Best-effort: the exact prompt used at extraction time isn't persisted
+    # across the approval wait, so this reflects the current prompt (which
+    # only differs if Settings -> Prompts was edited while this sat pending).
+    from helpers import get_recipe_system_prompt
+    jm.complete_job(job_id, recipe_data, image_path, final_target,
+                    structuring_prompt_used=get_recipe_system_prompt())
 
 
 def process_video_job(job_id, jm):
@@ -1506,6 +1567,12 @@ def process_video_job(job_id, jm):
 
         def update(self, stage, message, percent, video_title=None):
             jm.update_progress(job_id, stage, message, percent, video_title)
+
+        def set_dish_dir(self, dish_dir):
+            # Lets a still-in-progress job (sitting at the confirm-before-upload
+            # step) be resolved to its cache folder for a live re-run.
+            from database import update_job_dish_dir
+            update_job_dish_dir(job_id, dish_dir)
 
     reporter = Reporter()
 
@@ -1540,6 +1607,7 @@ def process_video_job(job_id, jm):
         result.image_path,
         result.output_target,
         llm_tokens=result.llm_tokens_estimate or stats.llm_tokens_estimate,
+        structuring_prompt_used=result.structuring_prompt_used,
     )
 
 

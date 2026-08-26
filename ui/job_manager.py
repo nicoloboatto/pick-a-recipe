@@ -438,6 +438,7 @@ class JobManager:
         image_path: Optional[str],
         output_target: str,
         llm_tokens: int = 0,
+        structuring_prompt_used: Optional[str] = None,
     ) -> None:
         job = get_job(job_id)
         if not job:
@@ -464,6 +465,8 @@ class JobManager:
             thumbnail_data=thumbnail_data,
             status='success',
             output_target=output_target,
+            dish_dir=job.get('dish_dir'),
+            structuring_prompt_used=structuring_prompt_used,
         )
         db_complete_job(job_id)
         with get_db() as conn:

@@ -30,6 +30,9 @@ from web_recipe_fetcher import is_video_url, fetch_web_recipe, download_image
 class ProgressReporter(Protocol):
     def is_cancelled(self) -> bool: ...
     def update(self, stage: str, message: str, percent: int, video_title: str | None = None) -> None: ...
+    # set_dish_dir is optional - implemented by the web UI's reporter (so a
+    # still-in-progress job's cache folder can be resolved for a live
+    # "re-run structuring" call) and safely absent from the CLI's.
 
 
 @dataclass
@@ -37,6 +40,7 @@ class PipelineResult:
     recipe_data: dict | None = None
     image_path: str | None = None
     output_target: str = ""
+    structuring_prompt_used: str | None = None
     llm_tokens_estimate: int = 0
     error: str | None = None
     awaiting_approval: bool = False
@@ -66,6 +70,69 @@ def _build_combined_source_text(transcription: str, visual_text: str, linked_tex
     if len(sections) == 1:
         return transcription
     return "\n\n".join(sections)
+
+
+def _annotate_linked_recipe(recipe_data: dict, linked_meta: dict) -> None:
+    """Record the linked-page fetch result on the recipe dict, in place."""
+    if not linked_meta.get("status"):
+        return
+    recipe_data["linkedRecipeUrl"] = linked_meta.get("url")
+    recipe_data["linkedRecipeStatus"] = linked_meta.get("status")
+    if linked_meta.get("status") == "unavailable":
+        recipe_data["linkedRecipeReason"] = linked_meta.get("reason")
+
+
+_NO_SOURCE_MATERIAL_MSG = (
+    "Source material for this recipe is no longer available (it may predate "
+    "this feature or its cache was cleared) - re-run the full extraction instead."
+)
+
+
+def rerun_structuring(dish_dir: str, source_url: str) -> dict:
+    """Re-run only the LLM structuring step from cached source material.
+
+    No re-download, no re-transcription: reuses the transcript/on-screen-text/
+    caption/linked-page caches written by run_extraction_pipeline(). Raises
+    FileNotFoundError (caught by callers and turned into a clear user-facing
+    message) if that cache is gone.
+
+    Returns {"recipe_data": ..., "structuring_prompt_used": ...}.
+    """
+    if not dish_dir or not os.path.isdir(dish_dir):
+        raise FileNotFoundError(_NO_SOURCE_MATERIAL_MSG)
+
+    lang = config.TARGET_LANGUAGE
+
+    def _read(filename: str) -> str:
+        path = os.path.join(dish_dir, filename)
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        return ""
+
+    transcription = _read(f"transcription_{lang}.txt")
+    if not transcription:
+        raise FileNotFoundError(_NO_SOURCE_MATERIAL_MSG)
+
+    visual_text = _read(f"visual_{lang}.txt")
+    caption = _read("caption.txt")
+    linked_text = _read("linked_page.txt")
+    combined_transcription = _build_combined_source_text(transcription, visual_text, linked_text)
+
+    from chef import Chef
+    from helpers import get_recipe_system_prompt
+
+    chef = Chef(source_url=source_url, description=caption, transcription=combined_transcription)
+    structuring_prompt_used = get_recipe_system_prompt()
+    recipe_data = chef.create_recipe()
+
+    linked_meta_path = os.path.join(dish_dir, "linked_page_meta.json")
+    if os.path.exists(linked_meta_path):
+        with open(linked_meta_path, "r", encoding="utf-8") as f:
+            linked_meta = json.load(f)
+        _annotate_linked_recipe(recipe_data, linked_meta)
+
+    return {"recipe_data": recipe_data, "structuring_prompt_used": structuring_prompt_used}
 
 
 @dataclass
@@ -126,6 +193,8 @@ def run_extraction_pipeline(
 
         dish_dir = os.path.join(work_dir, vid_id)
         reporter.update("download", "Video downloaded successfully", 30)
+        if hasattr(reporter, "set_dish_dir"):
+            reporter.set_dish_dir(dish_dir)
 
         # Cache the caption so a later "re-run structuring" doesn't need to
         # re-fetch video info to get it back.
@@ -238,18 +307,16 @@ def run_extraction_pipeline(
 
         reporter.update("evaluate", "Creating recipe with AI...", 85)
         from chef import Chef
+        from helpers import get_recipe_system_prompt
 
         chef = Chef(source_url=url, description=description, transcription=combined_transcription)
         stats.add_text(combined_transcription)
+        structuring_prompt_used = get_recipe_system_prompt()
         recipe_data = chef.create_recipe()
         if not recipe_data:
             return PipelineResult(error="Failed to create recipe", llm_tokens_estimate=stats.llm_tokens_estimate)
 
-        if linked_meta.get("status"):
-            recipe_data["linkedRecipeUrl"] = linked_meta.get("url")
-            recipe_data["linkedRecipeStatus"] = linked_meta.get("status")
-            if linked_meta.get("status") == "unavailable":
-                recipe_data["linkedRecipeReason"] = linked_meta.get("reason")
+        _annotate_linked_recipe(recipe_data, linked_meta)
 
         reporter.update("evaluate", "Recipe created successfully", 90)
 
