@@ -311,6 +311,7 @@ sessions; cookies take precedence when both are present.
 | **Mealie API Key** | API token from Mealie |
 | **Confirm Before Upload** | Show recipe preview before uploading |
 | **Nutrition lookup** | Look ingredients the built-in table does not know up in Open Food Facts (on by default; no API key needed) |
+| **Follow Recipe Links** | Fetch a recipe blog link found in the post caption and use its text alongside the video content (default: on) |
 
 #### Nutrition
 

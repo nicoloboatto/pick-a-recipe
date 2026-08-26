@@ -9,12 +9,14 @@ Supports two source types:
 from __future__ import annotations
 
 import base64
+import json
 import os
 from dataclasses import dataclass
 from typing import Callable, Optional, Protocol
 
 from config import config
 from image_extractor import extract_dish_image_candidates
+from recipe_link_extractor import find_and_fetch_linked_recipe
 from transcriber import Transcriber
 from uploaders import (
     format_targets,
@@ -110,6 +112,43 @@ def run_extraction_pipeline(
         dish_dir = os.path.join(work_dir, vid_id)
         reporter.update("download", "Video downloaded successfully", 30)
 
+        # Cache the caption so a later "re-run structuring" doesn't need to
+        # re-fetch video info to get it back.
+        with open(os.path.join(dish_dir, "caption.txt"), "w", encoding="utf-8") as f:
+            f.write(description)
+
+        if reporter.is_cancelled():
+            return PipelineResult(error="cancelled")
+
+        linked_text = ""
+        linked_meta = {"url": None, "status": None, "reason": None}
+        linked_meta_cache = os.path.join(dish_dir, "linked_page_meta.json")
+        linked_text_cache = os.path.join(dish_dir, "linked_page.txt")
+
+        if config.FOLLOW_RECIPE_LINKS:
+            if os.path.exists(linked_meta_cache):
+                reporter.update("download", "Using cached linked-recipe-page result", 32)
+                with open(linked_meta_cache, "r", encoding="utf-8") as f:
+                    linked_meta = json.load(f)
+                if os.path.exists(linked_text_cache):
+                    with open(linked_text_cache, "r", encoding="utf-8") as f:
+                        linked_text = f.read()
+            else:
+                reporter.update("download", "Checking recipe links in description...", 32)
+                link_result = find_and_fetch_linked_recipe(description)
+                if link_result is not None:
+                    linked_meta = {
+                        "url": link_result.url,
+                        "status": link_result.status,
+                        "reason": link_result.reason,
+                    }
+                    if link_result.status == "ok":
+                        linked_text = link_result.text
+                with open(linked_meta_cache, "w", encoding="utf-8") as f:
+                    json.dump(linked_meta, f)
+                with open(linked_text_cache, "w", encoding="utf-8") as f:
+                    f.write(linked_text)
+
         if reporter.is_cancelled():
             return PipelineResult(error="cancelled")
 
@@ -196,10 +235,17 @@ def run_extraction_pipeline(
             description=description,
             transcription=transcription,
             visual_text=visual_text,
+            linked_page_text=linked_text,
         )
         recipe_data = chef.create_recipe()
         if not recipe_data:
             return PipelineResult(error="Failed to create recipe", llm_tokens_estimate=stats.llm_tokens_estimate)
+
+        if linked_meta.get("status"):
+            recipe_data["linkedRecipeUrl"] = linked_meta.get("url")
+            recipe_data["linkedRecipeStatus"] = linked_meta.get("status")
+            if linked_meta.get("status") == "unavailable":
+                recipe_data["linkedRecipeReason"] = linked_meta.get("reason")
 
         reporter.update("evaluate", "Recipe created successfully", 90)
 

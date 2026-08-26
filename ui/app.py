@@ -1361,6 +1361,7 @@ def settings():
         config['mealie_enabled'] = 'true' if request.form.get('mealie_enabled') else 'false'
         config['nutrition_lookup_enabled'] = 'true' if request.form.get(
             'nutrition_lookup_enabled') else 'false'
+        config['follow_recipe_links'] = 'true' if request.form.get('follow_recipe_links') else 'false'
 
         # Only persist a prompt as a genuine override if it differs from the
         # in-code default. Otherwise, leaving the seeded default text

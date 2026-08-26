@@ -447,39 +447,6 @@ def _get_target_lang() -> str:
 DEFAULT_STRUCTURING_GUIDANCE = """You are a culinary data normalizer.
 
 General rules:
-- Keep instructions chronological; one step per step.
-- Do NOT invent quantities. If missing/unclear, leave quantity and unit empty.
-- Preserve numeric ranges literally, e.g., "3-4".
-- Put prep words (e.g., קצוץ / chopped, melted, room temperature) into notes, not the ingredient name.
-- Merge true duplicates (identical food+quantity+unit+notes).
-
-Source material priority: you will receive a "description" field (the post's
-caption) and a "transcript" field. The caption often contains the creator's
-own written ingredient list - a high-quality signal, since it wasn't spoken
-under time pressure. The transcript may also contain a section labeled
-"=== LINKED RECIPE PAGE ===", which is text scraped from a blog post the
-creator linked to. When present, treat that section as the most authoritative
-source of all: it's the creator's own written recipe, and written quantities
-beat spoken approximations every time. Prefer it over the transcript's
-"=== AUDIO TRANSCRIPTION ===" section whenever they conflict.
-"""
-
-
-def get_structuring_fixed_suffix() -> str:
-    """The non-editable half of the structuring prompt: the output format and
-    JSON schema the rest of the app (postprocessing, exporters) depends on.
-
-    Always appended after the (possibly customized) guidance section, and
-    never exposed for editing - see the "Prompts" section in Settings.
-    """
-    target_lang = _get_target_lang()
-# The editable half of the structuring prompt: culinary/style guidance that
-# is safe to customize per-user via Settings -> Prompts. Kept separate from
-# the JSON output contract below, which a custom prompt can never touch -
-# see get_structuring_fixed_suffix().
-DEFAULT_STRUCTURING_GUIDANCE = """You are a culinary data normalizer.
-
-General rules:
 - Keep instructions chronological; one step per object.
 - Do NOT invent quantities. If missing/unclear, leave quantity and unit empty.
 - A quantity that appears in no source MUST stay empty.

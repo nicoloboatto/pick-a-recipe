@@ -115,6 +115,7 @@ DEFAULT_CONFIG = {
     "vapid_public_key": "",
     "vapid_private_key": "",
     "vapid_subject": "",
+    "follow_recipe_links": "true",
     "custom_structuring_prompt": "",
     "custom_vision_prompt": "",
 }
@@ -362,6 +363,10 @@ class Config:
             return max(1, min(16, int(raw)))
         except (TypeError, ValueError):
             return 3
+
+    @property
+    def FOLLOW_RECIPE_LINKS(self) -> bool:
+        return _truthy(self._get('follow_recipe_links', DEFAULT_CONFIG['follow_recipe_links']))
 
     @property
     def CUSTOM_STRUCTURING_PROMPT(self) -> str:

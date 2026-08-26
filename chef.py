@@ -35,6 +35,7 @@ def build_recipe_user_payload(
     description: str,
     audio_transcript: str,
     visual_text: str = "",
+    linked_page_text: str = "",
     previous_attempt_error: str | None = None,
 ) -> dict[str, Any]:
     """Packet Chef sends the model. On-screen text outranks audio on conflict."""
@@ -49,6 +50,9 @@ def build_recipe_user_payload(
             "Never invent a quantity or unit; use empty strings if not clearly present."
         ),
     }
+    if linked_page_text:
+        # The creator's own written recipe, from a link in the caption.
+        payload["linked_recipe_page"] = linked_page_text
     if previous_attempt_error:
         payload["previous_attempt_error"] = previous_attempt_error
         payload["correction_hint"] = (
@@ -192,6 +196,7 @@ class Chef:
         transcription: str,
         *,
         visual_text: str = "",
+        linked_page_text: str = "",
         model: str | None = None,
     ):
         logger.info("[AI Recipe] Initializing Chef...")
@@ -200,6 +205,7 @@ class Chef:
         self.description = description
         self.transcription = transcription
         self.visual_text = visual_text or ""
+        self.linked_page_text = linked_page_text or ""
         logger.info(
             f"[AI Recipe] Chef initialized. Audio {len(transcription)} chars, "
             f"on-screen {len(self.visual_text)} chars"
@@ -243,6 +249,7 @@ class Chef:
             description=self.description,
             audio_transcript=self.transcription,
             visual_text=self.visual_text,
+            linked_page_text=self.linked_page_text,
         )
 
         extraction = self._extract_recipe(
