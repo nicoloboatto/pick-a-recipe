@@ -13,6 +13,7 @@ import json
 import os
 import re
 import time
+import zipfile
 
 from config import config
 from helpers import parse_iso_duration, setup_logger
@@ -210,3 +211,27 @@ class Mela:
 
         logger.info(f"[Mela] Recipe file written: {file_path}")
         return {"file_path": file_path, "title": mela_recipe["title"]}
+
+
+def build_melarecipes_archive(melarecipe_paths: list[str]) -> bytes:
+    """Bundle several .melarecipe files into one .melarecipes archive, in memory.
+
+    This is Mela's own format for importing multiple recipes in one action -
+    a plain zip of individual .melarecipe files (what Mela's own "Export
+    Selected Recipes" feature produces when more than one recipe is
+    selected). Importing a .melarecipes file into Mela imports every recipe
+    inside it at once.
+
+    Built in memory (these are small JSON files) rather than as a temp file
+    on disk: Werkzeug's send_file uses direct passthrough for file responses,
+    which means Response.call_on_close never fires to clean up a temp file
+    afterwards - there's nothing to clean up if there was never one.
+    """
+    import io
+
+    logger.info(f"[Mela] Bundling {len(melarecipe_paths)} recipes into a .melarecipes archive")
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in melarecipe_paths:
+            zf.write(path, arcname=os.path.basename(path))
+    return buffer.getvalue()
