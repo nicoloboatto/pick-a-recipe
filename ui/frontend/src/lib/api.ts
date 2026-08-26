@@ -159,6 +159,47 @@ export const api = {
       { method: 'POST', json: target ? { target } : {} },
     ),
 
+  rerunHistoryStructuring: (historyId: number) =>
+    request<{
+      status: string
+      recipe: import('@/types').RecipeData
+      structuring_prompt_used: string
+    }>(`/api/history/${historyId}/rerun-structuring`, { method: 'POST' }),
+
+  melaFileUrl: (historyId: number) => `/api/history/${historyId}/mela-file`,
+
+  /**
+   * POSTs a list of history ids and returns the resulting file as a Blob -
+   * a bulk download can't be a plain <a href> link since it needs a JSON
+   * body, unlike the single-file GET download above.
+   */
+  bulkMelaDownload: async (
+    historyIds: number[],
+  ): Promise<{ blob: Blob; filename: string }> => {
+    const res = await fetch('/api/history/bulk-mela-download', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history_ids: historyIds }),
+    })
+    if (res.status === 401) {
+      window.location.href = '/login'
+      throw new ApiError(401, 'Not authenticated')
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => null)
+      const message =
+        (data && typeof data === 'object' && 'error' in data
+          ? String((data as { error: unknown }).error)
+          : null) ?? `Request failed (${res.status})`
+      throw new ApiError(res.status, message)
+    }
+    const disposition = res.headers.get('Content-Disposition') || ''
+    const match = disposition.match(/filename=([^;]+)/)
+    const filename = match ? match[1].trim() : 'recipes.melarecipes'
+    return { blob: await res.blob(), filename }
+  },
+
   // ===== Combined recipes view =====
   getRecipes: (params?: {
     limit?: number
@@ -204,6 +245,12 @@ export const api = {
     request<{ status: string; upload_id: string; job_id: string }>(
       `/api/pending-uploads/${encodeURIComponent(uploadId)}/cancel`,
       { method: 'POST', json: {} },
+    ),
+
+  rerunPendingUploadStructuring: (uploadId: string) =>
+    request<{ status: string; recipe: import('@/types').RecipeData }>(
+      `/api/pending-uploads/${encodeURIComponent(uploadId)}/rerun-structuring`,
+      { method: 'POST' },
     ),
 
   // ===== Config =====

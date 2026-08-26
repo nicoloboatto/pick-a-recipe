@@ -18,6 +18,8 @@ import {
   InboxIcon,
   UtensilsIcon,
   BookIcon,
+  DownloadIcon,
+  SparklesIcon,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useSocketEvent } from '@/lib/socket'
@@ -85,6 +87,7 @@ interface TaskRow {
   progress: number
   thumbnailData: string | null
   outputTarget: string | null
+  melaFilePath: string | null
   pendingUploadId: string | null
   approvalExpiresAt: string
   queuePosition: number | null
@@ -170,6 +173,7 @@ function normalizeJob(t: Job): TaskRow {
     progress: t.progress || 0,
     thumbnailData: null,
     outputTarget: null,
+    melaFilePath: null,
     pendingUploadId: t.pending_upload_id ?? null,
     approvalExpiresAt: t.approval_expires_at ?? '',
     queuePosition: t.queue_position ?? null,
@@ -194,6 +198,7 @@ function normalizeHistory(r: CombinedItem): TaskRow {
     progress: 0,
     thumbnailData: r.thumbnail_data || null,
     outputTarget: r.output_target || null,
+    melaFilePath: r.mela_file_path || null,
     pendingUploadId: null,
     approvalExpiresAt: '',
     queuePosition: null,
@@ -288,11 +293,13 @@ interface ApprovalGalleryProps {
 }
 
 function ApprovalGallery({ uploadId, onTitleResolved, selectedIndex, onSelectIndex }: ApprovalGalleryProps) {
+  const queryClient = useQueryClient()
   const { data } = useQuery<PendingUpload>({
     queryKey: ['pending-upload', uploadId],
     queryFn: () => api.getPendingUpload(uploadId),
     staleTime: 30000,
   })
+  const [rerunPending, setRerunPending] = useState(false)
 
   useEffect(() => {
     if (data?.recipe?.name) onTitleResolved(data.recipe.name)
@@ -315,6 +322,19 @@ function ApprovalGallery({ uploadId, onTitleResolved, selectedIndex, onSelectInd
     if (r.recipeInstructions?.length) summaryBits.push(`${r.recipeInstructions.length} steps`)
   }
 
+  const handleRerunStructuring = useCallback(async () => {
+    setRerunPending(true)
+    try {
+      await api.rerunPendingUploadStructuring(uploadId)
+      toast.success('Recipe re-structured!')
+      void queryClient.invalidateQueries({ queryKey: ['pending-upload', uploadId] })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Re-run structuring failed')
+    } finally {
+      setRerunPending(false)
+    }
+  }, [uploadId, queryClient])
+
   return (
     <div className="mt-2 space-y-2">
       {summaryBits.length > 0 && (
@@ -323,6 +343,15 @@ function ApprovalGallery({ uploadId, onTitleResolved, selectedIndex, onSelectInd
       {candidates.length > 0 && (
         <ImagePicker images={candidates} value={selectedIndex} onChange={onSelectIndex} />
       )}
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={rerunPending}
+        onClick={() => void handleRerunStructuring()}
+      >
+        <SparklesIcon />
+        Re-run Structuring
+      </Button>
     </div>
   )
 }
@@ -401,6 +430,7 @@ interface RecipeModalProps {
 }
 
 function RecipeModal({ historyId, onClose, onDelete }: RecipeModalProps) {
+  const queryClient = useQueryClient()
   const { data, isLoading } = useQuery<HistoryEntry>({
     queryKey: ['history-item', historyId],
     queryFn: () => api.getHistoryItem(historyId!),
@@ -408,6 +438,22 @@ function RecipeModal({ historyId, onClose, onDelete }: RecipeModalProps) {
   })
 
   const [reuploadPending, setReuploadPending] = useState(false)
+  const [rerunPending, setRerunPending] = useState(false)
+
+  const handleRerunStructuring = useCallback(async () => {
+    if (!data) return
+    setRerunPending(true)
+    try {
+      await api.rerunHistoryStructuring(data.id)
+      toast.success('Recipe re-structured!')
+      void queryClient.invalidateQueries({ queryKey: ['history-item', data.id] })
+      void queryClient.invalidateQueries({ queryKey: ['recipes'] })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Re-run structuring failed')
+    } finally {
+      setRerunPending(false)
+    }
+  }, [data, queryClient])
 
   const handleReupload = useCallback(async (target: string) => {
     if (!data) return
@@ -481,6 +527,25 @@ function RecipeModal({ historyId, onClose, onDelete }: RecipeModalProps) {
                 <Trash2Icon />
                 Delete
               </Button>
+              {data.dish_dir && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={rerunPending}
+                  onClick={() => void handleRerunStructuring()}
+                >
+                  <SparklesIcon />
+                  Re-run Structuring
+                </Button>
+              )}
+              {data.mela_file_path && (
+                <Button variant="secondary" size="sm" asChild>
+                  <a href={api.melaFileUrl(data.id)} download>
+                    <DownloadIcon />
+                    Download .melarecipe
+                  </a>
+                </Button>
+              )}
               {canReupload && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -697,6 +762,14 @@ function TaskRowItem({
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             )}
+            {isSuccess && row.melaFilePath && (
+              <DropdownMenuItem asChild>
+                <a href={api.melaFileUrl(row.historyId!)} download>
+                  <DownloadIcon />
+                  Download .melarecipe
+                </a>
+              </DropdownMenuItem>
+            )}
             {isApproval && row.pendingUploadId && (
               <DropdownMenuItem
                 variant="destructive"
@@ -898,6 +971,10 @@ export function TasksPage() {
   const hasCancellable = selectedRows.some(
     (r) => !TERMINAL_STATUSES.has(r.status) && r.bucket !== 'approval',
   )
+  const melaHistoryIds = selectedRows
+    .filter((r) => r.kind === 'history' && r.melaFilePath)
+    .map((r) => r.historyId!)
+  const [bulkMelaPending, setBulkMelaPending] = useState(false)
 
   const handleApprove = useCallback(async (uploadId: string, imageIndex: number) => {
     try {
@@ -989,6 +1066,26 @@ export function TasksPage() {
       toast.error(err instanceof Error ? err.message : 'Bulk action failed')
     }
   }, [selected, invalidate])
+
+  const handleBulkMelaDownload = useCallback(async () => {
+    if (!melaHistoryIds.length) return
+    setBulkMelaPending(true)
+    try {
+      const { blob, filename } = await api.bulkMelaDownload(melaHistoryIds)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Bulk download failed')
+    } finally {
+      setBulkMelaPending(false)
+    }
+  }, [melaHistoryIds])
 
   const handleBulkDelete = useCallback(async () => {
     const historyIds: number[] = []
@@ -1107,6 +1204,17 @@ export function TasksPage() {
             <Button size="sm" variant="secondary" onClick={() => void handleBulkAction('cancel')}>
               <BanIcon />
               Cancel jobs
+            </Button>
+          )}
+          {melaHistoryIds.length > 0 && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={bulkMelaPending}
+              onClick={() => void handleBulkMelaDownload()}
+            >
+              <DownloadIcon />
+              Download {melaHistoryIds.length > 1 ? `${melaHistoryIds.length} .melarecipe files` : '.melarecipe'}
             </Button>
           )}
           <Button

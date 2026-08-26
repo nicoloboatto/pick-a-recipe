@@ -92,6 +92,8 @@ export interface QueueStats {
 // ===== Recipe data (Schema.org JSON-LD from chef._postprocess_recipe) =====
 
 export interface StructuredIngredient {
+  /** Component label (e.g. "SAUCE") when a recipe has more than one part, else "" */
+  group: string
   food: string
   quantity: string
   unit: string
@@ -168,6 +170,14 @@ export interface HistoryEntry {
   error_message: string | null
   output_target: string | null
   created_at: string
+  /** Path to a written .melarecipe file, when Mela export is enabled */
+  mela_file_path?: string | null
+  /** Cache folder for re-run structuring; not needed client-side beyond truthiness checks */
+  dish_dir?: string | null
+  /** The exact structuring prompt used to produce recipe_data */
+  structuring_prompt_used?: string | null
+  /** The recipe_data before the last successful re-run, if any (raw JSON string, unparsed) */
+  previous_recipe_data?: string | null
 }
 
 export interface Paginated<T> {
@@ -195,6 +205,7 @@ export interface CombinedItem {
   thumbnail_path: string | null
   thumbnail_data: string | null
   output_target: string | null
+  mela_file_path: string | null
   // job-only fields (null on history)
   progress: number | null
   current_stage: PipelineStage | null

@@ -32,6 +32,24 @@ def format_targets(targets: list[str]) -> str:
     return labels[0] if labels else 'no target'
 
 
+def preview_target_label() -> str:
+    """Human-readable label for every currently-enabled destination,
+    network targets and Mela alike - what a confirm-before-upload preview
+    should show as "uploading to", unlike get_enabled_targets()/
+    format_targets() above which are network-upload-only (Mela doesn't fit
+    upload_recipe_to_targets()'s loop, so it can't just be added to that list
+    without also being silently skipped there).
+    """
+    from config import config
+
+    labels = [TARGET_LABELS.get(t, t) for t in get_enabled_targets()]
+    if config.MELA_ENABLED:
+        labels.append('Mela')
+    if len(labels) > 1:
+        return ' & '.join(labels)
+    return labels[0] if labels else 'no target'
+
+
 def write_mela_file(recipe_data: dict, image_path: Optional[str]) -> Optional[str]:
     """Write a `.melarecipe` file if Mela export is enabled.
 

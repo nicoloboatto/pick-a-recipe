@@ -15,8 +15,8 @@ os.environ['DATA_DIR'] = _test_dir
 
 from config import config, set_config_value  # noqa: E402
 from database import init_db  # noqa: E402
-from mela import Mela  # noqa: E402
-from uploaders import write_mela_file  # noqa: E402
+from mela import Mela, build_melarecipes_archive  # noqa: E402
+from uploaders import write_mela_file, preview_target_label  # noqa: E402
 
 init_db()
 
@@ -87,6 +87,56 @@ class WriteMelaFileGatingTests(unittest.TestCase):
         path = write_mela_file({"name": "Enabled Recipe"}, None)
         self.assertIsNotNone(path)
         self.assertTrue(os.path.exists(path))
+
+
+class BulkArchiveTests(unittest.TestCase):
+    def test_bundles_files_into_zip(self):
+        import zipfile
+        import io
+
+        d = tempfile.mkdtemp()
+        paths = []
+        for i in range(3):
+            p = os.path.join(d, f'recipe-{i}.melarecipe')
+            with open(p, 'w') as f:
+                json.dump({"title": f"Recipe {i}"}, f)
+            paths.append(p)
+
+        archive_bytes = build_melarecipes_archive(paths)
+        zf = zipfile.ZipFile(io.BytesIO(archive_bytes))
+        self.assertEqual(
+            sorted(zf.namelist()),
+            ['recipe-0.melarecipe', 'recipe-1.melarecipe', 'recipe-2.melarecipe'],
+        )
+
+
+class PreviewTargetLabelTests(unittest.TestCase):
+    def tearDown(self):
+        set_config_value('mela_enabled', 'false')
+        set_config_value('tandoor_enabled', 'false')
+        set_config_value('mealie_enabled', 'false')
+        config.reload()
+
+    def test_mela_only(self):
+        set_config_value('mela_enabled', 'true')
+        set_config_value('tandoor_enabled', 'false')
+        set_config_value('mealie_enabled', 'false')
+        config.reload()
+        self.assertEqual(preview_target_label(), 'Mela')
+
+    def test_mela_plus_tandoor(self):
+        set_config_value('mela_enabled', 'true')
+        set_config_value('tandoor_enabled', 'true')
+        set_config_value('mealie_enabled', 'false')
+        config.reload()
+        self.assertEqual(preview_target_label(), 'Tandoor & Mela')
+
+    def test_nothing_enabled(self):
+        set_config_value('mela_enabled', 'false')
+        set_config_value('tandoor_enabled', 'false')
+        set_config_value('mealie_enabled', 'false')
+        config.reload()
+        self.assertEqual(preview_target_label(), 'no target')
 
 
 if __name__ == "__main__":

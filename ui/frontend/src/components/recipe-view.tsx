@@ -172,18 +172,32 @@ export function RecipeView({ recipe }: RecipeViewProps) {
           <div>
             <h3 className="mb-2 text-sm font-semibold">Ingredients</h3>
             {hasStructured ? (
-              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                {structuredIngredients.map((ing, i) => (
-                  <div key={i} className="flex gap-1 text-sm">
-                    <span className="font-medium text-foreground">
-                      {[ing.quantity, ing.unit].filter(Boolean).join('\u00a0')}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {ing.food}
-                      {ing.notes ? ` (${ing.notes})` : ''}
-                    </span>
-                  </div>
-                ))}
+              <div className="space-y-2">
+                {(() => {
+                  let lastGroup: string | null = null
+                  return structuredIngredients.map((ing, i) => {
+                    const showHeading = ing.group && ing.group !== lastGroup
+                    lastGroup = ing.group || lastGroup
+                    return (
+                      <div key={i}>
+                        {showHeading && (
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            {ing.group}
+                          </p>
+                        )}
+                        <div className="flex gap-1 text-sm">
+                          <span className="font-medium text-foreground">
+                            {[ing.quantity, ing.unit].filter(Boolean).join('\u00a0')}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {ing.food}
+                            {ing.notes ? ` (${ing.notes})` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })
+                })()}
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">

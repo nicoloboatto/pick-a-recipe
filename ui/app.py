@@ -37,7 +37,7 @@ from job_manager import (
     init_job_manager, get_job_manager, resolve_max_concurrent,
     prune_artifact_dirs,
 )
-from uploaders import upload_recipe_to_targets, get_enabled_targets, format_targets
+from uploaders import upload_recipe_to_targets, get_enabled_targets, format_targets, preview_target_label
 
 app = Flask(__name__)
 
@@ -1070,6 +1070,48 @@ def download_mela_file(history_id):
     return send_file(file_path, as_attachment=True, download_name=os.path.basename(file_path))
 
 
+@app.route('/api/history/bulk-mela-download', methods=['POST'])
+@api_login_required
+def bulk_mela_download():
+    """Download several .melarecipe files at once.
+
+    A single match downloads as a plain .melarecipe file; two or more get
+    merged into one .melarecipes archive (Mela's own multi-recipe import
+    format) so they import into Mela in one action.
+    """
+    import io
+
+    data = request.get_json() or {}
+    history_ids = data.get('history_ids') or []
+    if not isinstance(history_ids, list) or not history_ids:
+        return jsonify({'error': 'history_ids must be a non-empty list'}), 400
+
+    paths = []
+    for raw_id in history_ids[:100]:
+        try:
+            item = get_history_entry(int(raw_id))
+        except (TypeError, ValueError):
+            continue
+        file_path = item.get('mela_file_path') if item else None
+        if file_path and os.path.exists(file_path):
+            paths.append(file_path)
+
+    if not paths:
+        return jsonify({'error': 'No .melarecipe files found for the selected items'}), 404
+
+    if len(paths) == 1:
+        return send_file(paths[0], as_attachment=True, download_name=os.path.basename(paths[0]))
+
+    from mela import build_melarecipes_archive
+    archive_bytes = build_melarecipes_archive(paths)
+    return send_file(
+        io.BytesIO(archive_bytes),
+        as_attachment=True,
+        download_name='recipes.melarecipes',
+        mimetype='application/zip',
+    )
+
+
 @app.route('/api/history/<int:history_id>/reupload', methods=['POST'])
 @api_login_required
 def reupload_recipe(history_id):
@@ -1757,7 +1799,7 @@ def process_video_job(job_id, jm):
 
         preview = PreviewWaiter(
             job_id=job_id,
-            target_label=format_targets(get_enabled_targets()),
+            target_label=preview_target_label(),
             emit_preview=emit_preview,
             open_approval_fn=lambda **kw: jm.open_approval(**kw),
         )
