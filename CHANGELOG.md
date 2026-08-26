@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Improvements
+
+- **Grouped, Raw-State Ingredients**: The structuring prompt now requires ingredients in their raw, pre-instruction state (no "roasted pumpkin puree" when a step roasts and purees raw pumpkin) and decomposes generic prepared components (a bechamel, a marinade, a dough) into their own base ingredients. Added a `group` field to the ingredient schema so multi-component recipes (marinade + sauce + coating, filling + bechamel, etc.) get labeled sections (`MARINADE`, `SAUCE`, ...) instead of one flat list, and the same ingredient name used in two components (e.g. salt) no longer incorrectly merges into a single line. Tandoor (`is_header` rows) and Mealie (inline `title` headers) both render the groups natively. The linked-recipe-page priority language was also sharpened: when present, it now explicitly outranks the caption and on-screen text, not just the spoken transcript.
+
 ### New Features
 
 - **Follow Linked Recipe Pages**: New `recipe_link_extractor.py` scans the post caption for a linked recipe blog post, filters out social-platform/link-in-bio noise, follows shorteners, and extracts recipe text (preferring schema.org `Recipe` JSON-LD, falling back to readability-style extraction) to feed the structuring LLM as an additional, clearly-labeled source alongside the transcript and on-screen text. Paywalls, bot-checks, and thin content are treated as "unavailable," never as failures — the job continues with video content only, and the attempted URL/status are recorded on the recipe for later surfacing in exporters/UI. New "Follow recipe links found in captions" setting (default on). (The preview/History note showing an "unavailable" link, and Mela's notes-field surfacing, land alongside the UI/exporter work they depend on.)

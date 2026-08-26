@@ -109,11 +109,14 @@ class Chef:
         # --- Clean and deduplicate recipeIngredients ---
         ingredients = data.get("recipeIngredients") or []
         clean = []
-        seen_foods: dict[str, int] = {}  # Map food name (casefolded) to index in clean list
-        
+        # Map (group, food) casefolded to index in clean list. Group is part of
+        # the key so e.g. "salt" in a marinade and "salt" in a sauce never merge.
+        seen_foods: dict[tuple[str, str], int] = {}
+
         for i in ingredients:
             if not isinstance(i, dict):
                 continue
+            group = " ".join(str(i.get("group", "")).split()).strip().upper()
             food = " ".join(str(i.get("food", "")).split()).strip()
             qty = " ".join(str(i.get("quantity", "")).split()).strip()
             unit = " ".join(str(i.get("unit", "")).split()).strip()
@@ -121,16 +124,16 @@ class Chef:
             raw_from_llm = (i.get("raw") or "").strip()
             if not food:
                 continue
-            
-            food_key = food.casefold()
+
+            food_key = (group.casefold(), food.casefold())
             # Generate raw line for display (use LLM-provided raw if available)
             raw_line = raw_from_llm or " ".join(p for p in [qty, unit, food, notes] if p).strip()
-            
+
             if food_key in seen_foods:
                 # Merge duplicate: combine quantities or notes
                 existing_idx = seen_foods[food_key]
                 existing = clean[existing_idx]
-                
+
                 # If same quantity and unit, just merge notes
                 if existing["quantity"] == qty and existing["unit"] == unit:
                     if notes and notes not in existing["notes"]:
@@ -155,24 +158,31 @@ class Chef:
                                     existing["notes"] = notes
                         else:
                             # Different units, keep both as separate entries
-                            clean.append({"food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
+                            clean.append({"group": group, "food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
                     except ValueError:
                         # Non-numeric quantities, keep as separate entries
-                        clean.append({"food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
+                        clean.append({"group": group, "food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
                 else:
                     # One or both have no quantity, keep both
-                    clean.append({"food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
+                    clean.append({"group": group, "food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
             else:
                 seen_foods[food_key] = len(clean)
-                clean.append({"food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
+                clean.append({"group": group, "food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
 
         # Store structured ingredients
         data["recipeIngredients"] = clean
         logger.info(f"[Chef] Processed {len(clean)} ingredients")
 
-        # Create Schema.org recipeIngredient (flattened strings) for compatibility
+        # Create Schema.org recipeIngredient (flattened strings) for compatibility.
+        # Insert a bare group-name line whenever the group changes, so the
+        # fallback text list (used if structured extraction is unavailable)
+        # still shows component groupings.
         flattened = []
+        last_group = None
         for i in clean:
+            if i.get("group") and i["group"] != last_group:
+                flattened.append(f"# {i['group']}")
+            last_group = i.get("group") or last_group
             parts = [i["quantity"], i["unit"], i["food"], i.get("notes", "")]
             line = " ".join(p for p in parts if p).strip().replace("–", "-")
             if line:
