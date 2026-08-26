@@ -93,6 +93,8 @@ DEFAULT_CONFIG = {
     "yt_dlp_cookies_file": "",
     "yt_dlp_cookies_browser": "",
     "max_concurrent_jobs": "3",
+    "custom_structuring_prompt": "",
+    "custom_vision_prompt": "",
 }
 
 
@@ -277,6 +279,14 @@ class Config:
             return max(1, min(16, int(raw)))
         except (TypeError, ValueError):
             return 3
+
+    @property
+    def CUSTOM_STRUCTURING_PROMPT(self) -> str:
+        return self._get('custom_structuring_prompt', DEFAULT_CONFIG['custom_structuring_prompt'])
+
+    @property
+    def CUSTOM_VISION_PROMPT(self) -> str:
+        return self._get('custom_vision_prompt', DEFAULT_CONFIG['custom_vision_prompt'])
 
     def reload(self):
         """Reload configuration from database."""

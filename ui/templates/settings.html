@@ -162,6 +162,40 @@
             </div>
         </div>
 
+        <!-- Prompts Settings -->
+        <div class="settings-section">
+            <h2><i class="fas fa-scroll"></i> Prompts</h2>
+            <p class="section-description">Tune the wording sent to the LLM without editing code. Each prompt has an editable guidance section and a fixed suffix (shown read-only below it) that the app depends on for correctly-shaped output — the fixed part is always appended and can't be edited or removed.</p>
+
+            <div class="form-group">
+                <label for="custom_structuring_prompt">Structuring Prompt</label>
+                <textarea id="custom_structuring_prompt" name="custom_structuring_prompt" rows="10"
+                          style="width:100%; font-family:monospace;" spellcheck="false">{{ config.custom_structuring_prompt or default_structuring_guidance }}</textarea>
+                <button type="button" class="btn btn-secondary btn-sm reset-prompt-btn" data-prompt="structuring" data-target="custom_structuring_prompt">
+                    <i class="fas fa-undo"></i> Reset to default
+                </button>
+                <small class="form-hint">Turns the transcript, on-screen text, caption, and any linked recipe page into structured recipe fields.</small>
+                <details class="prompt-fixed-suffix">
+                    <summary>Fixed suffix (always appended, read-only)</summary>
+                    <pre style="white-space:pre-wrap; word-break:break-word;">{{ structuring_fixed_suffix }}</pre>
+                </details>
+            </div>
+
+            <div class="form-group">
+                <label for="custom_vision_prompt">On-Screen-Text Prompt</label>
+                <textarea id="custom_vision_prompt" name="custom_vision_prompt" rows="6"
+                          style="width:100%; font-family:monospace;" spellcheck="false">{{ config.custom_vision_prompt or default_vision_guidance }}</textarea>
+                <button type="button" class="btn btn-secondary btn-sm reset-prompt-btn" data-prompt="vision" data-target="custom_vision_prompt">
+                    <i class="fas fa-undo"></i> Reset to default
+                </button>
+                <small class="form-hint">Extracts on-screen text (ingredients, instructions, captions) from video frames.</small>
+                <details class="prompt-fixed-suffix">
+                    <summary>Fixed suffix (always appended, read-only)</summary>
+                    <pre style="white-space:pre-wrap; word-break:break-word;">{{ vision_fixed_suffix }}</pre>
+                </details>
+            </div>
+        </div>
+
         <!-- Whisper Settings -->
         <div class="settings-section">
             <h2><i class="fas fa-microphone"></i> Whisper Transcription</h2>
@@ -419,6 +453,28 @@ document.getElementById('cookies-file-upload').addEventListener('change', async 
     
     // Reset the file input
     e.target.value = '';
+});
+
+// Reset-to-default clears the saved override server-side (not just the
+// textarea) so the prompt tracks the in-code default going forward instead
+// of freezing today's text - see /api/settings/reset-prompt.
+document.querySelectorAll('.reset-prompt-btn').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const promptName = this.dataset.prompt;
+        if (!confirm('Reset the ' + promptName + ' prompt to its default? This clears your saved customization.')) return;
+        try {
+            const resp = await fetch('/api/settings/reset-prompt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: promptName }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Failed to reset prompt');
+            document.getElementById(this.dataset.target).value = data.default_text;
+        } catch (error) {
+            alert('Error resetting prompt: ' + error.message);
+        }
+    });
 });
 </script>
 {% endblock %}

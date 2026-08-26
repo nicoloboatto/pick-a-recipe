@@ -211,10 +211,16 @@ class Chef:
                 logger.debug(f"[AI Recipe] Raw response: {response_text[:500]}...")
                 if attempt < max_retries - 1:
                     continue
-        
+
+        custom_prompt_note = ""
+        if config.CUSTOM_STRUCTURING_PROMPT.strip():
+            custom_prompt_note = (
+                " A custom structuring prompt is currently active and may be the "
+                "cause - review or reset it in Settings > Prompts."
+            )
         raise RuntimeError(
             f"Failed to parse LLM response as JSON after {max_retries} attempts. "
-            f"Last error: {last_error}"
+            f"Last error: {last_error}.{custom_prompt_note}"
         )
 
     def create_recipe_from_web_content(

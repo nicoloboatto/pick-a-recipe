@@ -10,6 +10,42 @@ from llm_resilience import call_with_model_fallback
 
 logger = setup_logger(__name__)
 
+# Map language codes to full names for clearer prompts
+_LANG_NAMES = {
+    "he": "Hebrew",
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "ar": "Arabic",
+    "ru": "Russian",
+}
+
+# Editable guidance for on-screen-text extraction (Settings -> Prompts).
+DEFAULT_VISION_GUIDANCE = """Analyze this video/images and extract ALL text that appears on screen.
+This includes:
+- Recipe titles and names
+- Ingredient lists with quantities
+- Cooking instructions or steps
+- Captions or subtitles
+- Any overlay text, annotations, or labels
+- Timer displays or temperatures
+
+Return ONLY the extracted text, organized logically.
+If text appears multiple times, include it once.
+Format ingredient lists clearly with quantities and measurements."""
+
+
+def get_visual_text_fixed_suffix() -> str:
+    """The non-editable half of the vision prompt: just the output-language
+    directive, so a custom prompt can't break the app's language feature."""
+    target_lang = _LANG_NAMES.get(config.TARGET_LANGUAGE, config.TARGET_LANGUAGE)
+    return (
+        f"Output the text in {target_lang} language. "
+        f"If the original text is in a different language, translate it to {target_lang}."
+    )
+
 
 class Transcriber:
     def __init__(
@@ -341,31 +377,11 @@ class Transcriber:
         return frame_paths
 
     def _get_visual_text_prompt(self) -> str:
-        """Get the prompt for visual text extraction."""
-        # Map language codes to full names for clearer prompts
-        lang_names = {
-            "he": "Hebrew",
-            "en": "English",
-            "es": "Spanish",
-            "fr": "French",
-            "de": "German",
-            "it": "Italian",
-            "ar": "Arabic",
-            "ru": "Russian",
-        }
-        target_lang = lang_names.get(
-            config.TARGET_LANGUAGE, config.TARGET_LANGUAGE)
+        """Get the prompt for visual text extraction.
 
-        return f"""Analyze this video/images and extract ALL text that appears on screen.
-This includes:
-- Recipe titles and names
-- Ingredient lists with quantities
-- Cooking instructions or steps
-- Captions or subtitles
-- Any overlay text, annotations, or labels
-- Timer displays or temperatures
-
-Return ONLY the extracted text, organized logically.
-If text appears multiple times, include it once.
-Format ingredient lists clearly with quantities and measurements.
-Output the text in {target_lang} language. If the original text is in a different language, translate it to {target_lang}."""
+        Guidance is editable via Settings -> Prompts (config.CUSTOM_VISION_PROMPT);
+        the output-language line is a fixed one-line suffix so a custom prompt
+        can't accidentally break the app's target-language feature.
+        """
+        guidance = config.CUSTOM_VISION_PROMPT.strip() or DEFAULT_VISION_GUIDANCE.strip()
+        return f"{guidance}\n\n{get_visual_text_fixed_suffix()}"
