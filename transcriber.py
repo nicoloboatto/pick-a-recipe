@@ -15,6 +15,44 @@ from recipe_schema import (
 
 logger = setup_logger(__name__)
 
+# Map language codes to full names for clearer prompts
+_LANG_NAMES = {
+    "he": "Hebrew",
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "ar": "Arabic",
+    "ru": "Russian",
+}
+
+# Editable guidance for on-screen-text extraction (Settings -> Prompts).
+DEFAULT_VISION_GUIDANCE = """Analyze this video/images and extract ALL text that appears on screen.
+This includes:
+- Recipe titles and names
+- Ingredient lists with quantities
+- Cooking instructions or steps
+- Captions or subtitles
+- Any overlay text, annotations, or labels
+- Timer displays or temperatures
+
+If text appears multiple times, include it once.
+Keep ingredient lines with their quantities and measurements."""
+
+
+def get_visual_text_fixed_suffix() -> str:
+    """The non-editable half of the vision prompt: the JSON shape that
+    parse_visual_text() reads and the output-language directive, so a custom
+    prompt can't break either."""
+    target_lang = _LANG_NAMES.get(config.TARGET_LANGUAGE, config.TARGET_LANGUAGE)
+    return f"""Return a JSON object with:
+- "title": recipe name or empty string
+- "ingredients_text": ingredient lines, one per line (empty if none)
+- "instructions_text": cooking steps (empty if none)
+- "other_text": any remaining on-screen text
+Output the text in {target_lang} language. If the original text is in a different language, translate it to {target_lang}."""
+
 
 class Transcriber:
     def __init__(
@@ -319,36 +357,14 @@ class Transcriber:
         return frame_paths
 
     def _get_visual_text_prompt(self) -> str:
-        """Get the prompt for visual text extraction."""
-        lang_names = {
-            "he": "Hebrew",
-            "en": "English",
-            "es": "Spanish",
-            "fr": "French",
-            "de": "German",
-            "it": "Italian",
-            "ar": "Arabic",
-            "ru": "Russian",
-        }
-        target_lang = lang_names.get(
-            config.TARGET_LANGUAGE, config.TARGET_LANGUAGE)
+        """Get the prompt for visual text extraction.
 
-        return f"""Analyze this video/images and extract ALL text that appears on screen.
-This includes:
-- Recipe titles and names
-- Ingredient lists with quantities
-- Cooking instructions or steps
-- Captions or subtitles
-- Any overlay text, annotations, or labels
-- Timer displays or temperatures
-
-Return a JSON object with:
-- "title": recipe name or empty string
-- "ingredients_text": ingredient lines, one per line (empty if none)
-- "instructions_text": cooking steps (empty if none)
-- "other_text": any remaining on-screen text
-If text appears multiple times, include it once.
-Output the text in {target_lang} language. If the original text is in a different language, translate it to {target_lang}."""
+        Guidance is editable via Settings -> Prompts (config.CUSTOM_VISION_PROMPT);
+        the JSON shape and output-language line are a fixed suffix so a custom
+        prompt can't break parsing or the app's target-language feature.
+        """
+        guidance = config.CUSTOM_VISION_PROMPT.strip() or DEFAULT_VISION_GUIDANCE.strip()
+        return f"{guidance}\n\n{get_visual_text_fixed_suffix()}"
 
 
 def _plain_visual_text(raw: str) -> str:

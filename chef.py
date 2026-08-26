@@ -359,9 +359,16 @@ class Chef:
                 logger.debug(f"[AI Recipe] Raw response: {response_text[:500]}...")
                 if attempt < max_retries - 1:
                     continue
+        custom_prompt = config.CUSTOM_STRUCTURING_PROMPT.strip()
+        custom_prompt_note = ""
+        if custom_prompt and system_prompt.startswith(custom_prompt):
+            custom_prompt_note = (
+                " A custom structuring prompt is currently active and may be the "
+                "cause - review or reset it in Settings > Prompts."
+            )
         raise RuntimeError(
             f"Failed to parse LLM response as a recipe after {max_retries} attempts. "
-            f"Last error: {last_error}"
+            f"Last error: {last_error}.{custom_prompt_note}"
         )
 
     def _enrich_yield_and_nutrition(self, recipe: dict) -> dict:

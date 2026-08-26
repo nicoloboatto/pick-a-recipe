@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### New Features
+
+- **Editable Prompts**: Settings → Prompts exposes the structuring and on-screen-text prompts as editable guidance with a fixed, read-only output-format suffix that can't be broken by customization, persisted in the existing config store, with a "Reset to default" that clears the override rather than freezing today's text. The structuring guidance also now explicitly states how to weigh a linked recipe page (when present) against the caption and transcript — see the upcoming recipe-link-extraction feature for where that section comes from. A JSON-parse failure while a custom prompt is active now names it as the likely cause instead of a generic error. (Re-run Structuring, the other half of the original feature, is ported separately alongside the caching it depends on.)
+
 ### Improvements
 
 - **Deterministic Title Case**: Recipe titles are now normalized to title case in code (`helpers.to_title_case()`), not left to the LLM — mechanical formatting isn't inference material. Handles apostrophes correctly (unlike `str.title()`), hyphenated words ("Air-Fried"), and common connector words ("Chicken with Rice", not "Chicken With Rice").

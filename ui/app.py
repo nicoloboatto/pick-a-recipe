@@ -1361,6 +1361,24 @@ def settings():
         config['mealie_enabled'] = 'true' if request.form.get('mealie_enabled') else 'false'
         config['nutrition_lookup_enabled'] = 'true' if request.form.get(
             'nutrition_lookup_enabled') else 'false'
+
+        # Only persist a prompt as a genuine override if it differs from the
+        # in-code default. Otherwise, leaving the seeded default text
+        # untouched and hitting Save would freeze today's default forever
+        # every time settings are saved, defeating "the default in code is
+        # the single source of truth."
+        from helpers import DEFAULT_STRUCTURING_GUIDANCE
+        from transcriber import DEFAULT_VISION_GUIDANCE
+        if 'custom_structuring_prompt' in request.form:
+            submitted_structuring = request.form.get('custom_structuring_prompt', '').strip()
+            config['custom_structuring_prompt'] = (
+                submitted_structuring if submitted_structuring != DEFAULT_STRUCTURING_GUIDANCE.strip() else ''
+            )
+        if 'custom_vision_prompt' in request.form:
+            submitted_vision = request.form.get('custom_vision_prompt', '').strip()
+            config['custom_vision_prompt'] = (
+                submitted_vision if submitted_vision != DEFAULT_VISION_GUIDANCE.strip() else ''
+            )
         config['confirm_before_upload'] = 'true' if request.form.get(
             'confirm_before_upload') else 'false'
 
@@ -1370,6 +1388,8 @@ def settings():
         return redirect(url_for('settings'))
 
     from ai_providers import _COMPATIBLE_CATALOGS, API_TYPES, load_providers
+    from helpers import DEFAULT_STRUCTURING_GUIDANCE, get_structuring_fixed_suffix
+    from transcriber import DEFAULT_VISION_GUIDANCE, get_visual_text_fixed_suffix
 
     return render_template(
         'settings.html',
@@ -1378,6 +1398,10 @@ def settings():
         api_types=API_TYPES,
         compatible_catalogs=_COMPATIBLE_CATALOGS,
         ai_providers=load_providers(),
+        default_structuring_guidance=DEFAULT_STRUCTURING_GUIDANCE.strip(),
+        structuring_fixed_suffix=get_structuring_fixed_suffix(),
+        default_vision_guidance=DEFAULT_VISION_GUIDANCE.strip(),
+        vision_fixed_suffix=get_visual_text_fixed_suffix(),
     )
 
 
@@ -2249,6 +2273,36 @@ def import_settings():
         'message': f'Imported {len(filtered_settings)} settings',
         'imported_keys': list(filtered_settings.keys())
     })
+
+
+@app.route('/api/settings/reset-prompt', methods=['POST'])
+@api_admin_required
+def reset_prompt():
+    """Clear a custom prompt override, reverting to the in-code default.
+
+    A dedicated endpoint (rather than routing "reset" through the main
+    settings form) so resetting actually means "track whatever the in-code
+    default is" - not "copy today's default text into the saved override,"
+    which would freeze it against future upstream improvements.
+    """
+    from helpers import DEFAULT_STRUCTURING_GUIDANCE
+    from transcriber import DEFAULT_VISION_GUIDANCE
+
+    data = request.get_json() or {}
+    prompt_name = data.get('prompt')
+    key_and_default = {
+        'structuring': ('custom_structuring_prompt', DEFAULT_STRUCTURING_GUIDANCE),
+        'vision': ('custom_vision_prompt', DEFAULT_VISION_GUIDANCE),
+    }
+    if prompt_name not in key_and_default:
+        return jsonify({'error': 'Unknown prompt. Expected "structuring" or "vision".'}), 400
+
+    config_key, default_text = key_and_default[prompt_name]
+    current_config = load_config()
+    current_config[config_key] = ''
+    _persist_config(current_config)
+
+    return jsonify({'status': 'success', 'default_text': default_text.strip()})
 
 
 # Cookies authenticate yt-dlp as whoever exported them, and the path is written

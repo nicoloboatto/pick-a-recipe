@@ -115,6 +115,8 @@ DEFAULT_CONFIG = {
     "vapid_public_key": "",
     "vapid_private_key": "",
     "vapid_subject": "",
+    "custom_structuring_prompt": "",
+    "custom_vision_prompt": "",
 }
 
 
@@ -360,6 +362,14 @@ class Config:
             return max(1, min(16, int(raw)))
         except (TypeError, ValueError):
             return 3
+
+    @property
+    def CUSTOM_STRUCTURING_PROMPT(self) -> str:
+        return self._get('custom_structuring_prompt', DEFAULT_CONFIG['custom_structuring_prompt'])
+
+    @property
+    def CUSTOM_VISION_PROMPT(self) -> str:
+        return self._get('custom_vision_prompt', DEFAULT_CONFIG['custom_vision_prompt'])
 
     def reload(self):
         """Reload configuration from database."""
