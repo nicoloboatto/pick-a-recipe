@@ -92,6 +92,8 @@ export interface QueueStats {
 // ===== Recipe data (Schema.org JSON-LD from chef._postprocess_recipe) =====
 
 export interface StructuredIngredient {
+  /** Component label (e.g. "SAUCE"); empty for single-component recipes */
+  group?: string
   food: string
   quantity: string
   unit: string

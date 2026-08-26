@@ -29,18 +29,22 @@ class Tandoor(RecipeExporter):
     def _build_ingredients(self, recipe_data: dict) -> list[dict]:
         """
         Build Tandoor ingredient list from structured recipe data.
-        
-        Expects recipeIngredients from LLM with: food, quantity, unit, notes, raw
+
+        Expects recipeIngredients from LLM with: group, food, quantity, unit, notes, raw
         Tandoor API requires: food ({"name": str}), unit ({"name": str} or null), amount (float)
+        A "group" (e.g. "SAUCE", "MARINADE") becomes an is_header row inserted
+        before that component's ingredients, matching Tandoor's own grouping.
         """
         ing_struct = recipe_data.get("recipeIngredients") or []
-        
+
         if not isinstance(ing_struct, list) or not ing_struct:
             logger.warning("[Tandoor] No structured ingredients found")
             return []
-        
+
         ingredients = []
-        for order, item in enumerate(ing_struct):
+        order = 0
+        last_group = None
+        for item in ing_struct:
             if not isinstance(item, dict):
                 continue
 
@@ -49,13 +53,28 @@ class Tandoor(RecipeExporter):
             unit_name = (item.get("unit") or "").strip()
             food_name = (item.get("food") or "").strip()
             notes = (item.get("notes") or "").strip()
-            
+            group = (item.get("group") or "").strip()
+
             # Food name is required - use fallbacks if needed
             if not food_name:
                 food_name = raw[:128] if raw else None
             if not food_name:
                 logger.warning(f"[Tandoor] Skipping ingredient with no food name: {item}")
                 continue
+
+            if group and group != last_group:
+                ingredients.append({
+                    "amount": 0,
+                    "unit": None,
+                    "food": {"name": group[:128]},
+                    "note": "",
+                    "order": order,
+                    "is_header": True,
+                    "no_amount": True,
+                    "original_text": "",
+                })
+                order += 1
+            last_group = group or last_group
 
             amount = coerce_num(qty_s)
             ingredients.append({
@@ -68,6 +87,7 @@ class Tandoor(RecipeExporter):
                 "no_amount": amount == 0,
                 "original_text": raw[:512] if raw else "",
             })
+            order += 1
 
         logger.info(f"[Tandoor] Built {len(ingredients)} ingredients")
         return ingredients

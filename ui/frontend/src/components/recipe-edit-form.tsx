@@ -37,6 +37,7 @@ function ingredientsFrom(recipe: RecipeData): StructuredIngredient[] {
   const items = recipe.recipeIngredients ?? []
   if (items.length > 0) {
     return items.map((ing) => ({
+      group: ing.group ?? '',
       food: ing.food ?? '',
       quantity: ing.quantity ?? '',
       unit: ing.unit ?? '',
@@ -89,6 +90,7 @@ function emitRecipe(
     description,
     recipeYield,
     recipeIngredients: ingredients.map((ing) => ({
+      group: (ing.group ?? '').trim(),
       food: ing.food.trim(),
       quantity: ing.quantity.trim(),
       unit: ing.unit.trim(),

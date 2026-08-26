@@ -451,18 +451,56 @@ General rules:
 - Do NOT invent quantities. If missing/unclear, leave quantity and unit empty.
 - A quantity that appears in no source MUST stay empty.
 - Preserve numeric ranges literally, e.g., "3-4".
-- Put prep words (e.g., קצוץ / chopped, melted, room temperature) into notes, not the ingredient name.
-- Merge true duplicates (identical food+quantity+unit+notes).
+- Put quick prep modifiers (e.g., chopped, melted, room temperature, diced) into notes,
+  not the ingredient name - but only modifiers that do NOT already have their own
+  instruction step (see "Ingredients must be raw" below).
+- Merge true duplicates (identical group+food+quantity+unit+notes). Never merge
+  ingredients that belong to different groups, even if the food name is identical
+  (e.g. salt used in both a marinade and a sauce is two separate lines).
 
-Source material priority: you will receive a "description" field (the post's
-caption), an "on_screen_text" field and an "audio_transcript" field. The
-caption often contains the creator's own written ingredient list - a
-high-quality signal, since it wasn't spoken under time pressure. If
-on_screen_text and audio_transcript disagree, trust on_screen_text for
-ingredients and amounts. There may also be a "linked_recipe_page" field: text
-scraped from a blog post the creator linked to. When present, treat it as the
-most authoritative source of all: it's the creator's own written recipe, and
-written quantities beat spoken approximations every time.
+Ingredients must be raw, not pre-prepared: every ingredient must describe the item
+in the state it's in BEFORE the instructions touch it - the way it would appear on a
+shopping list. If the instructions describe transforming an ingredient (roasting,
+pureeing, melting, marinating, cooking down, infusing, reducing, etc.), that
+transformation belongs only in the instructions text - never pre-applied to the
+ingredient's food name or notes. For example, if a step says "roast the pumpkin until
+tender, then puree it", the ingredient is "pumpkin" (raw), not "roasted pumpkin" or
+"pumpkin puree". Check every ingredient against the instructions: if an ingredient's
+wording already assumes a transformation that a later step performs, rewrite the
+ingredient to its pre-transformation, raw form instead.
+
+Never list a prepared component as if it were itself a single purchasable ingredient
+(e.g. "bechamel", "marinade", "dough", "batter", "sauce") - decompose it into its own
+raw base ingredients under a component group instead (see grouping below), and
+describe how they're combined in the instructions. If the source material only names
+a prepared component generically without listing its own ingredients (e.g. "a simple
+bechamel"), decompose it into that preparation's standard base ingredients (bechamel:
+butter, flour, milk; a basic dough: flour, water, salt, yeast; etc.), leaving quantity
+and unit empty when the source doesn't specify amounts, rather than listing the
+prepared item itself as one line.
+
+Group ingredients by component: when a recipe has more than one distinct component
+(e.g. a marinade, a sauce, a coating, a filling, a dough, a topping), set each
+ingredient's "group" to a short label for its component, in capitals (e.g.
+"MARINADE", "SAUCE", "FILLING", "COATING", "DOUGH", "TOPPING"). Use the same group
+label consistently for every ingredient that belongs to that component. If the recipe
+has only one component, leave "group" as an empty string for every ingredient rather
+than inventing a label.
+
+Source material priority, highest first:
+1. The "linked_recipe_page" field, when present - text scraped from a blog post the
+   creator linked to. This is the creator's own written recipe and outranks every
+   other source, including the caption: use its quantities, ingredients, and steps as
+   the primary basis for the recipe whenever it's present, even where it conflicts
+   with the caption or the video.
+2. The "description" field (the post's caption) - often contains the creator's own
+   written ingredient list, a high-quality signal since it wasn't spoken under time
+   pressure.
+3. The "on_screen_text" field - on-screen overlays are usually deliberately written
+   out. If it and the audio disagree, trust on_screen_text for ingredients and amounts.
+4. The "audio_transcript" field - spoken narration, prone to vague approximations
+   ("a good glug of olive oil"); use it to fill gaps the higher sources leave, not to
+   override them.
 """
 
 
@@ -494,6 +532,7 @@ Required fields:
 Ingredients:
 - "recipeIngredients" (array of objects). Each item MUST be:
   {{
+    "group": "<component label in capitals, e.g. 'SAUCE', or empty string if the recipe has one component>",
     "food": "<base ingredient noun in {target_lang}>",
     "quantity": "<number or range as string, or empty string if unknown>",
     "unit": "<unit abbreviation or name in {target_lang}, or empty string if none>",
@@ -547,6 +586,7 @@ Required fields:
 Ingredients:
 - "recipeIngredients" (array of objects). Each item MUST be:
   {{
+    "group": "<component label in capitals, e.g. 'SAUCE', or empty string if the recipe has one component>",
     "food": "<base ingredient noun in {target_lang}>",
     "quantity": "<number or range as string, or empty string if unknown>",
     "unit": "<unit abbreviation or name in {target_lang}, or empty string if none>",

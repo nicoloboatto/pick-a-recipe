@@ -53,6 +53,11 @@ def build_recipe_user_payload(
     if linked_page_text:
         # The creator's own written recipe, from a link in the caption.
         payload["linked_recipe_page"] = linked_page_text
+        payload["quantity_rule"] = (
+            "Prefer linked_recipe_page for ingredients and quantities, then "
+            "on_screen_text. Use audio_transcript only to fill gaps. "
+            "Never invent a quantity or unit; use empty strings if not clearly present."
+        )
     if previous_attempt_error:
         payload["previous_attempt_error"] = previous_attempt_error
         payload["correction_hint"] = (
@@ -75,11 +80,14 @@ def postprocess_recipe(data: dict, source_url: str | None) -> dict:
 
     ingredients = data.get("recipeIngredients") or []
     clean = []
-    seen_foods: dict[str, int] = {}
+    # Map (group, food) casefolded to index in clean list. Group is part of
+    # the key so e.g. "salt" in a marinade and "salt" in a sauce never merge.
+    seen_foods: dict[tuple[str, str], int] = {}
 
     for i in ingredients:
         if not isinstance(i, dict):
             continue
+        group = " ".join(str(i.get("group", "")).split()).strip().upper()
         food = " ".join(str(i.get("food", "")).split()).strip()
         qty = " ".join(str(i.get("quantity", "")).split()).strip()
         unit = " ".join(str(i.get("unit", "")).split()).strip()
@@ -88,7 +96,7 @@ def postprocess_recipe(data: dict, source_url: str | None) -> dict:
         if not food:
             continue
 
-        food_key = food.casefold()
+        food_key = (group.casefold(), food.casefold())
         raw_line = raw_from_llm or " ".join(p for p in [qty, unit, food, notes] if p).strip()
 
         if food_key in seen_foods:
@@ -114,21 +122,27 @@ def postprocess_recipe(data: dict, source_url: str | None) -> dict:
                             else:
                                 existing["notes"] = notes
                     else:
-                        clean.append({"food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
+                        clean.append({"group": group, "food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
                 except ValueError:
-                    clean.append({"food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
+                    clean.append({"group": group, "food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
             else:
-                clean.append({"food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
+                clean.append({"group": group, "food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
         else:
             seen_foods[food_key] = len(clean)
-            clean.append({"food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
+            clean.append({"group": group, "food": food, "quantity": qty, "unit": unit, "notes": notes, "raw": raw_line})
 
     data["recipeIngredients"] = clean
     logger.info(f"[Chef] Processed {len(clean)} ingredients")
     normalize_ingredient_units(clean)
 
+    # Insert a bare group-name line whenever the group changes, so the
+    # flattened fallback text list still shows component groupings.
     flattened = []
+    last_group = None
     for i in clean:
+        if i.get("group") and i["group"] != last_group:
+            flattened.append(f"# {i['group']}")
+        last_group = i.get("group") or last_group
         parts = [i["quantity"], i["unit"], i["food"], i.get("notes", "")]
         line = " ".join(p for p in parts if p).strip().replace("–", "-")
         if line:

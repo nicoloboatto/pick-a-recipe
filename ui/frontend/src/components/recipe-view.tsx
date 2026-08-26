@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -174,15 +175,22 @@ export function RecipeView({ recipe }: RecipeViewProps) {
             {hasStructured ? (
               <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                 {structuredIngredients.map((ing, i) => (
-                  <div key={i} className="flex gap-1 text-sm">
-                    <span className="font-medium text-foreground">
-                      {[ing.quantity, ing.unit].filter(Boolean).join('\u00a0')}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {ing.food}
-                      {ing.notes ? ` (${ing.notes})` : ''}
-                    </span>
-                  </div>
+                  <Fragment key={i}>
+                    {ing.group && ing.group !== structuredIngredients[i - 1]?.group && (
+                      <p className="col-span-full mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {ing.group}
+                      </p>
+                    )}
+                    <div className="flex gap-1 text-sm">
+                      <span className="font-medium text-foreground">
+                        {[ing.quantity, ing.unit].filter(Boolean).join('\u00a0')}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {ing.food}
+                        {ing.notes ? ` (${ing.notes})` : ''}
+                      </span>
+                    </div>
+                  </Fragment>
                 ))}
               </div>
             ) : (

@@ -91,6 +91,8 @@ class HowToStep(BaseModel):
 
 class Ingredient(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    # Component label ("SAUCE", "MARINADE"), empty for single-component recipes.
+    group: str = ""
     food: str
     quantity: str
     unit: str

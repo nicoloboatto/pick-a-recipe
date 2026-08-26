@@ -193,6 +193,7 @@ class Mealie(RecipeExporter):
                         "originalText": line.strip(),
                     })
         else:
+            last_group = None
             for item in ing_struct:
                 if not isinstance(item, dict):
                     continue
@@ -206,7 +207,7 @@ class Mealie(RecipeExporter):
                     modifiers = [m.strip()
                                  for m in modifiers.split(",") if m.strip()]
                 notes_from_item = (item.get("notes") or "").strip()
-                
+
                 # Build note from modifiers and notes
                 note_parts = []
                 if notes_from_item:
@@ -214,14 +215,22 @@ class Mealie(RecipeExporter):
                 if modifiers:
                     note_parts.append(" ".join(modifiers))
                 note = " | ".join(note_parts) if note_parts else None
-                
+
+                # Mealie renders an ingredient's "title" as an inline header
+                # immediately above it - setting it on the first ingredient of
+                # each new group (e.g. "SAUCE") gives the same grouped look
+                # as Tandoor's is_header rows and Mela's "#" headings.
+                group = (item.get("group") or "").strip()
+                title = group if group and group != last_group else None
+                last_group = group or last_group
+
                 # Get or create unit and food with proper IDs
                 unit_obj = self._get_or_create_unit(unit_name, units, headers)
                 food_obj = self._get_or_create_food(food_name, foods, headers)
-                
+
                 # Build ingredient with proper unit/food objects (with IDs)
                 ingredient = {
-                    "title": None,
+                    "title": title,
                     "note": note,
                     "unit": unit_obj,  # Now has proper ID from Mealie
                     "food": food_obj,  # Now has proper ID from Mealie
@@ -229,7 +238,7 @@ class Mealie(RecipeExporter):
                     "quantity": qty_num,
                     "originalText": raw if raw else None,
                 }
-                
+
                 ingredients.append(ingredient)
 
         # Instructions
