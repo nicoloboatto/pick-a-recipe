@@ -87,6 +87,8 @@ DEFAULT_CONFIG = {
     "target_language": "he",
     "mealie_enabled": "false",
     "tandoor_enabled": "true",
+    "mela_enabled": "false",
+    "mela_output_dir": "",
     "whisper_model": "small",
     "confirm_before_upload": "true",
     "hf_token": "",
@@ -252,6 +254,15 @@ class Config:
     @property
     def TANDOOR_ENABLED(self) -> bool:
         return _truthy(self._get('tandoor_enabled', DEFAULT_CONFIG['tandoor_enabled']))
+
+    @property
+    def MELA_ENABLED(self) -> bool:
+        return _truthy(self._get('mela_enabled', DEFAULT_CONFIG['mela_enabled']))
+
+    @property
+    def MELA_OUTPUT_DIR(self) -> str:
+        configured = self._get('mela_output_dir', DEFAULT_CONFIG['mela_output_dir'])
+        return configured or os.path.join(DATA_DIR, 'mela_exports')
 
     @property
     def WHISPER_MODEL(self) -> str:

@@ -22,6 +22,7 @@ from uploaders import (
     format_targets,
     get_enabled_targets,
     upload_recipe_to_targets,
+    write_mela_file,
 )
 from video_downloader import VideoDownloader
 from web_recipe_fetcher import is_video_url, fetch_web_recipe, download_image
@@ -40,6 +41,7 @@ class PipelineResult:
     recipe_data: dict | None = None
     image_path: str | None = None
     output_target: str = ""
+    mela_file_path: str | None = None
     structuring_prompt_used: str | None = None
     llm_tokens_estimate: int = 0
     error: str | None = None
@@ -150,8 +152,8 @@ class PreviewWaiter:
 def _no_target_result(recipe_data, image_path, stats) -> PipelineResult:
     """Result for the 'nothing enabled in Settings' failure case."""
     return PipelineResult(
-        error='No recipe manager is enabled — enable Mealie and/or Tandoor '
-              'in Settings',
+        error='No recipe manager is enabled — enable Mealie, Tandoor, and/or '
+              'Mela in Settings',
         recipe_data=recipe_data,
         image_path=image_path,
         llm_tokens_estimate=stats.llm_tokens_estimate,
@@ -334,11 +336,14 @@ def run_extraction_pipeline(
             )
 
         upload_targets = get_enabled_targets()
-        if not upload_targets:
+        if not upload_targets and not config.MELA_ENABLED:
             return _no_target_result(recipe_data, image_path, stats)
 
-        reporter.update('upload',
-                        f'Uploading to {format_targets(upload_targets)}...', 95)
+        if upload_targets:
+            reporter.update('upload',
+                            f'Uploading to {format_targets(upload_targets)}...', 95)
+        else:
+            reporter.update('upload', 'Saving Mela recipe file...', 95)
 
         if reporter.is_cancelled():
             return PipelineResult(error="cancelled", recipe_data=recipe_data, image_path=image_path,
@@ -350,14 +355,45 @@ def run_extraction_pipeline(
                 recipe_data=recipe_data,
                 image_path=image_path,
                 output_target="none",
+                structuring_prompt_used=structuring_prompt_used,
+                llm_tokens_estimate=stats.llm_tokens_estimate,
+            )
+
+        # Mela is a local file write, not a network upload - handled as its
+        # own independent step rather than through upload_recipe_to_targets(),
+        # which is shaped around "upload to every enabled target".
+        mela_file_path = None
+        mela_error = None
+        if config.MELA_ENABLED:
+            try:
+                mela_file_path = write_mela_file(recipe_data, image_path)
+            except Exception as exc:
+                mela_error = str(exc)
+
+        if not upload_targets:
+            # Mela-only: nothing left to upload, the file write above is the whole job.
+            if mela_error:
+                return PipelineResult(error=f"Mela export failed: {mela_error}", recipe_data=recipe_data,
+                                      image_path=image_path, structuring_prompt_used=structuring_prompt_used,
+                                      llm_tokens_estimate=stats.llm_tokens_estimate)
+            reporter.update("complete", "Recipe saved as a Mela file!", 100)
+            return PipelineResult(
+                recipe_data=recipe_data,
+                image_path=image_path,
+                output_target="mela",
+                mela_file_path=mela_file_path,
+                structuring_prompt_used=structuring_prompt_used,
                 llm_tokens_estimate=stats.llm_tokens_estimate,
             )
 
         final_target, failures = upload_recipe_to_targets(recipe_data, image_path)
-        if failures and len(failures) == len(upload_targets):
+        if mela_error:
+            failures = failures + [("mela", mela_error)]
+        if failures and len(failures) == len(upload_targets) + (1 if config.MELA_ENABLED else 0):
             msgs = "; ".join(f"{t}: {msg}" for t, msg in failures)
             return PipelineResult(error=f"All uploads failed: {msgs}", recipe_data=recipe_data,
-                                  image_path=image_path, llm_tokens_estimate=stats.llm_tokens_estimate)
+                                  image_path=image_path, structuring_prompt_used=structuring_prompt_used,
+                                  llm_tokens_estimate=stats.llm_tokens_estimate)
 
         if failures:
             failed_msgs = "; ".join(f"{t}: {msg}" for t, msg in failures)
@@ -366,12 +402,16 @@ def run_extraction_pipeline(
                 f"Uploaded to {final_target}. Failed: {failed_msgs}",
                 100,
             )
+        elif mela_file_path:
+            reporter.update("complete", f"Recipe uploaded to {final_target} and saved as a Mela file!", 100)
         else:
             reporter.update("complete", f"Recipe uploaded successfully to {final_target}!", 100)
         return PipelineResult(
             recipe_data=recipe_data,
             image_path=image_path,
             output_target=final_target,
+            mela_file_path=mela_file_path,
+            structuring_prompt_used=structuring_prompt_used,
             llm_tokens_estimate=stats.llm_tokens_estimate,
         )
 

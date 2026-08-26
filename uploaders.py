@@ -32,6 +32,26 @@ def format_targets(targets: list[str]) -> str:
     return labels[0] if labels else 'no target'
 
 
+def write_mela_file(recipe_data: dict, image_path: Optional[str]) -> Optional[str]:
+    """Write a `.melarecipe` file if Mela export is enabled.
+
+    Mela has no server or API - it's a local file write, not a network
+    upload - so it doesn't fit upload_recipe_to_targets()'s "upload to every
+    enabled target" loop or its (label, failures) return shape. Kept as its
+    own independent step instead, called alongside upload_recipe_to_targets()
+    by both the direct pipeline and the confirm-before-upload resume flow.
+
+    Returns the written file path, or None if Mela isn't enabled. Raises on
+    failure - callers decide how to report it, same as the network targets.
+    """
+    from config import config
+    if not config.MELA_ENABLED:
+        return None
+    from mela import Mela
+    result = Mela().create_recipe(recipe_data, image_path)
+    return result['file_path']
+
+
 def upload_recipe_to_targets(recipe_data: dict,
                              image_path: Optional[str]) -> tuple[str, list]:
     """Upload recipe (+ optional image) to all enabled targets.

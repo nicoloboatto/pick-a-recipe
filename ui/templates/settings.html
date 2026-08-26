@@ -145,11 +145,37 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Mela -->
+                <div class="export-target-card {% if config.mela_enabled != 'true' %}is-disabled{% endif %}" data-target-card>
+                    <div class="export-target-header">
+                        <span class="export-target-icon"><i class="fas fa-file-download"></i></span>
+                        <div class="export-target-title">
+                            <strong>Mela</strong>
+                            <small class="export-target-status" data-target-status>Enabled</small>
+                        </div>
+                        <label class="switch" aria-label="Enable Mela export">
+                            <input type="checkbox" class="switch-input" id="mela_enabled"
+                                   name="mela_enabled" data-target-toggle
+                                   {% if config.mela_enabled == 'true' %}checked{% endif %}>
+                            <span class="switch-track"><span class="switch-knob"></span></span>
+                        </label>
+                    </div>
+                    <div class="export-target-body" data-target-body>
+                        <p class="section-description">Mela has no server — recipes are saved as a local `.melarecipe` file you download and open in the Mela app (macOS/iOS).</p>
+                        <div class="form-group">
+                            <label for="mela_output_dir">Output Directory</label>
+                            <input type="text" id="mela_output_dir" name="mela_output_dir"
+                                   value="{{ config.mela_output_dir }}" placeholder="Leave blank to use the default"
+                                   autocomplete="off" autocapitalize="none" spellcheck="false">
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div class="alert alert-warning" id="no-target-warning" {% if config.mealie_enabled == 'true' or config.tandoor_enabled == 'true' %}hidden{% endif %}>
+            <div class="alert alert-warning" id="no-target-warning" {% if config.mealie_enabled == 'true' or config.tandoor_enabled == 'true' or config.mela_enabled == 'true' %}hidden{% endif %}>
                 <i class="fas fa-exclamation-triangle"></i>
-                <strong>No recipe manager is enabled.</strong> Recipes will not be uploaded anywhere until you enable Mealie or Tandoor.
+                <strong>No recipe manager is enabled.</strong> Recipes will not be uploaded or saved anywhere until you enable Mealie, Tandoor, and/or Mela.
             </div>
 
             <div class="form-group checkbox-group">

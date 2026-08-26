@@ -147,6 +147,7 @@ All configuration is managed through the web UI settings page (`/settings`). On 
 | **Tandoor API Key** | API token from Tandoor |
 | **Mealie Host** | URL of your Mealie instance |
 | **Mealie API Key** | API token from Mealie |
+| **Mela Output Directory** | Where `.melarecipe` files get written (default: `data/mela_exports`) |
 | **Confirm Before Upload** | Show recipe preview before uploading |
 | **Follow Recipe Links** | Fetch a recipe blog link found in the post caption and use its text alongside the video content (default: on) |
 

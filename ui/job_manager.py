@@ -439,6 +439,7 @@ class JobManager:
         output_target: str,
         llm_tokens: int = 0,
         structuring_prompt_used: Optional[str] = None,
+        mela_file_path: Optional[str] = None,
     ) -> None:
         job = get_job(job_id)
         if not job:
@@ -467,6 +468,7 @@ class JobManager:
             output_target=output_target,
             dish_dir=job.get('dish_dir'),
             structuring_prompt_used=structuring_prompt_used,
+            mela_file_path=mela_file_path,
         )
         db_complete_job(job_id)
         with get_db() as conn:

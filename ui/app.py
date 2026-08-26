@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, make_response, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, make_response, send_from_directory, send_file
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
 from database import (
@@ -527,6 +527,8 @@ def settings():
         config['target_language'] = request.form.get('target_language', 'he')
         config['tandoor_enabled'] = 'true' if request.form.get('tandoor_enabled') else 'false'
         config['mealie_enabled'] = 'true' if request.form.get('mealie_enabled') else 'false'
+        config['mela_enabled'] = 'true' if request.form.get('mela_enabled') else 'false'
+        config['mela_output_dir'] = request.form.get('mela_output_dir', '')
         config['follow_recipe_links'] = 'true' if request.form.get('follow_recipe_links') else 'false'
 
         # Only persist a prompt as a genuine override if it differs from the
@@ -937,6 +939,23 @@ def _resolve_history_image(item):
             return tmp.name, True
     except OSError:
         return None, False
+
+
+@app.route('/api/history/<int:history_id>/mela-file', methods=['GET'])
+@api_login_required
+def download_mela_file(history_id):
+    """Download the .melarecipe file for a history entry."""
+    item = get_history_entry(history_id)
+    if not item:
+        return jsonify({'error': 'History entry not found'}), 404
+
+    file_path = item.get('mela_file_path')
+    if not file_path or not os.path.exists(file_path):
+        return jsonify({
+            'error': 'The .melarecipe file is no longer available (it may have been removed by a container rebuild or volume reset).'
+        }), 404
+
+    return send_file(file_path, as_attachment=True, download_name=os.path.basename(file_path))
 
 
 @app.route('/api/history/<int:history_id>/reupload', methods=['POST'])
@@ -1522,10 +1541,39 @@ def resume_upload_job(job_id: str, jm) -> None:
     if candidates and 0 <= selected < len(candidates):
         image_path = candidates[selected]
 
-    target_count = len(get_enabled_targets())
-    final_target, failures = upload_recipe_to_targets(recipe_data, image_path)
+    # Best-effort: the exact prompt used at extraction time isn't persisted
+    # across the approval wait, so this reflects the current prompt (which
+    # only differs if Settings -> Prompts was edited while this sat pending).
+    from helpers import get_recipe_system_prompt
+    structuring_prompt_used = get_recipe_system_prompt()
 
-    if failures and len(failures) == target_count:
+    from config import config as app_config
+    from uploaders import write_mela_file
+    mela_file_path = None
+    mela_error = None
+    if app_config.MELA_ENABLED:
+        try:
+            mela_file_path = write_mela_file(recipe_data, image_path)
+        except Exception as exc:
+            mela_error = str(exc)
+
+    upload_targets = get_enabled_targets()
+    if not upload_targets:
+        # Mela-only: nothing left to upload, the file write above is the whole job.
+        if mela_error:
+            jm.fail_job(job_id, f'Mela export failed: {mela_error}')
+            return
+        jm.update_progress(job_id, 'complete', 'Recipe saved as a Mela file!', 100)
+        jm.complete_job(job_id, recipe_data, image_path, 'mela',
+                        structuring_prompt_used=structuring_prompt_used,
+                        mela_file_path=mela_file_path)
+        return
+
+    final_target, failures = upload_recipe_to_targets(recipe_data, image_path)
+    if mela_error:
+        failures = failures + [('mela', mela_error)]
+
+    if failures and len(failures) == len(upload_targets) + (1 if app_config.MELA_ENABLED else 0):
         msgs = '; '.join(f"{t}: {msg}" for t, msg in failures)
         jm.fail_job(job_id, f'All uploads failed: {msgs}')
         return
@@ -1534,16 +1582,16 @@ def resume_upload_job(job_id: str, jm) -> None:
         msgs = '; '.join(f"{t}: {msg}" for t, msg in failures)
         jm.update_progress(job_id, 'complete',
                            f'Uploaded to {final_target}. Failed: {msgs}', 100)
+    elif mela_file_path:
+        jm.update_progress(job_id, 'complete',
+                           f'Recipe uploaded to {final_target} and saved as a Mela file!', 100)
     else:
         jm.update_progress(job_id, 'complete',
                            f'Recipe uploaded successfully to {final_target}!', 100)
 
-    # Best-effort: the exact prompt used at extraction time isn't persisted
-    # across the approval wait, so this reflects the current prompt (which
-    # only differs if Settings -> Prompts was edited while this sat pending).
-    from helpers import get_recipe_system_prompt
     jm.complete_job(job_id, recipe_data, image_path, final_target,
-                    structuring_prompt_used=get_recipe_system_prompt())
+                    structuring_prompt_used=structuring_prompt_used,
+                    mela_file_path=mela_file_path)
 
 
 def process_video_job(job_id, jm):
@@ -1608,6 +1656,7 @@ def process_video_job(job_id, jm):
         result.output_target,
         llm_tokens=result.llm_tokens_estimate or stats.llm_tokens_estimate,
         structuring_prompt_used=result.structuring_prompt_used,
+        mela_file_path=result.mela_file_path,
     )
 
 
