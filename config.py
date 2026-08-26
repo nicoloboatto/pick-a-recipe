@@ -93,6 +93,7 @@ DEFAULT_CONFIG = {
     "yt_dlp_cookies_file": "",
     "yt_dlp_cookies_browser": "",
     "max_concurrent_jobs": "3",
+    "follow_recipe_links": "true",
     "custom_structuring_prompt": "",
     "custom_vision_prompt": "",
 }
@@ -279,6 +280,10 @@ class Config:
             return max(1, min(16, int(raw)))
         except (TypeError, ValueError):
             return 3
+
+    @property
+    def FOLLOW_RECIPE_LINKS(self) -> bool:
+        return _truthy(self._get('follow_recipe_links', DEFAULT_CONFIG['follow_recipe_links']))
 
     @property
     def CUSTOM_STRUCTURING_PROMPT(self) -> str:

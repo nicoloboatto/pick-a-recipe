@@ -160,6 +160,15 @@
                 </label>
                 <small class="form-hint">Show a preview of the recipe first, then upload once you confirm.</small>
             </div>
+
+            <div class="form-group checkbox-group">
+                <label class="checkbox-label" for="follow_recipe_links">
+                    <input type="checkbox" id="follow_recipe_links" name="follow_recipe_links"
+                           {% if config.follow_recipe_links != 'false' %}checked{% endif %}>
+                    <span class="checkbox-text">Follow recipe links found in captions</span>
+                </label>
+                <small class="form-hint">When a caption links to the creator's blog post, fetch it and use its text (often the exact written recipe) alongside the video content. Paywalled or blocked pages are skipped gracefully.</small>
+            </div>
         </div>
 
         <!-- Prompts Settings -->

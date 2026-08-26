@@ -527,6 +527,7 @@ def settings():
         config['target_language'] = request.form.get('target_language', 'he')
         config['tandoor_enabled'] = 'true' if request.form.get('tandoor_enabled') else 'false'
         config['mealie_enabled'] = 'true' if request.form.get('mealie_enabled') else 'false'
+        config['follow_recipe_links'] = 'true' if request.form.get('follow_recipe_links') else 'false'
 
         # Only persist a prompt as a genuine override if it differs from the
         # in-code default. Otherwise, leaving the seeded default text

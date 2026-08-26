@@ -148,6 +148,7 @@ All configuration is managed through the web UI settings page (`/settings`). On 
 | **Mealie Host** | URL of your Mealie instance |
 | **Mealie API Key** | API token from Mealie |
 | **Confirm Before Upload** | Show recipe preview before uploading |
+| **Follow Recipe Links** | Fetch a recipe blog link found in the post caption and use its text alongside the video content (default: on) |
 
 ## Usage
 

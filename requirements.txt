@@ -8,3 +8,4 @@ flask-socketio
 google-genai
 authlib
 beautifulsoup4
+trafilatura
