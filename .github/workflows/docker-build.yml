@@ -1,9 +1,17 @@
 
 # Build & push the Docker image to GHCR (GitHub Container Registry).
 #
-# On every push to main:
+# On every push to main or upstream-rebase:
 #   1. Build the image (linux/amd64) on a GitHub-hosted runner.
-#   2. Push it to ghcr.io/<owner>/<repo> as :latest and :sha-<short-sha>.
+#   2. Push it to ghcr.io/<owner>/<repo>, tagged by branch name plus the
+#      short commit SHA. Only a push to main also moves the :latest tag,
+#      so pushing other branches (e.g. upstream-rebase while it's being
+#      tested) never disturbs what :latest points to.
+#
+#   main            -> :latest, :main,            :sha-<short-sha>
+#   upstream-rebase -> :upstream-rebase,           :sha-<short-sha>
+#
+# To test a branch before merging: `docker pull ghcr.io/<owner>/<repo>:<branch-name>`.
 #
 # No repository secrets required — GHCR auth uses the automatically
 # generated GITHUB_TOKEN.
@@ -24,11 +32,11 @@ name: Build & Push Docker Image
 
 on:
   push:
-    branches: [main]
+    branches: [main, upstream-rebase]
   workflow_dispatch:
 
 concurrency:
-  group: docker-build-main
+  group: docker-build-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -59,7 +67,8 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+            type=ref,event=branch
             type=sha,format=short
 
       # amd64 only: Unraid runs on x86_64. GitHub-hosted runners build amd64

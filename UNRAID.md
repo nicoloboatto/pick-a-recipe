@@ -77,6 +77,25 @@ Apply, then open `http://<unraid-ip>:5006` and log in with `admin` /
 Every push to `main` overwrites the `:latest` tag on GHCR. To pick up a new
 build in Unraid: **Docker tab → pick-a-recipe → Force Update**.
 
+## Testing a branch before merging it into main
+
+Other branches build too, tagged with their own branch name instead of
+`:latest` (see `docker-build.yml`) — e.g. pushing `upstream-rebase` produces
+`ghcr.io/nicoloboatto/pick-a-recipe:upstream-rebase`, pullable and runnable
+side by side with your `:latest` container without touching it:
+
+```bash
+docker pull ghcr.io/nicoloboatto/pick-a-recipe:upstream-rebase
+docker run --rm -p 5007:5006 \
+  -e FLASK_SECRET_KEY=$(openssl rand -hex 32) \
+  -v pick-a-recipe-test:/app/data \
+  ghcr.io/nicoloboatto/pick-a-recipe:upstream-rebase
+```
+
+(different host port and a separate named volume, so it doesn't share state
+with a production container.) Once you're happy with it, merge the branch
+into `main` and the next push there resumes owning `:latest`.
+
 ## Files used by upstream's own deployment, not this one
 
 `docker-compose.yml`, `docker-compose.srv2.yml`, `portainer/`,
