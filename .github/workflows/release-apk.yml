@@ -48,6 +48,9 @@ jobs:
     # Hosted: the Android SDK and build-tools are preinstalled, and a fresh
     # machine every run means no toolchain to keep provisioned by hand. The
     # same combination already builds a debug APK in ci.yml.
+    # Upstream's own publishing (their release APK, signed with their keys). A fork
+    # publishes through docker-build.yml instead, so skip it everywhere else.
+    if: github.repository == 'pickeld/pick-a-recipe'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

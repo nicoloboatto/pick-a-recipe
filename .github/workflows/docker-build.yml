@@ -1,9 +1,15 @@
 
 # Build & push the Docker image to GHCR (GitHub Container Registry).
 #
+# This is the fork's only publishing path. Upstream's deploy.yml and
+# release*.yml are guarded to pickeld/pick-a-recipe and skip here.
+#
 # On every push to main or upstream-rebase:
 #   1. Build the image (linux/amd64) on a GitHub-hosted runner.
-#   2. Push it to ghcr.io/<owner>/<repo>, tagged by branch name plus the
+#   2. Smoke-test it: native dependencies load, the app starts and answers
+#      /healthz, the React UI is in the image, and this fork's own routes
+#      exist. A failure stops here, so a broken image is never pushed.
+#   3. Push it to ghcr.io/<owner>/<repo>, tagged by branch name plus the
 #      short commit SHA. Only a push to main also moves the :latest tag,
 #      so pushing other branches (e.g. upstream-rebase while it's being
 #      tested) never disturbs what :latest points to.
@@ -74,7 +80,65 @@ jobs:
       # amd64 only: Unraid runs on x86_64. GitHub-hosted runners build amd64
       # natively (no QEMU emulation needed), so this is fast without needing
       # a self-hosted runner.
-      - name: Build and push
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: pick-a-recipe:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Check the native dependencies
+        # A wheel can install and still fail to load; bcrypt and trafilatura
+        # are this fork's additions on top of upstream's list.
+        run: |
+          docker run --rm pick-a-recipe:smoke sh -ec '
+            ffmpeg -version | head -1
+            deno --version | head -1
+            python -c "import faster_whisper, ctranslate2, av, curl_cffi, argon2, bcrypt, cryptography, trafilatura; print(\"native imports ok\")"
+          '
+
+      - name: Start the app
+        # Runs the image's own CMD with an empty data volume, like a fresh
+        # Unraid container.
+        run: |
+          docker run -d --name app -p 5006:5006 pick-a-recipe:smoke
+          for _ in $(seq 90); do
+            if curl -fsS http://localhost:5006/healthz; then
+              echo
+              break
+            fi
+            if [[ $(docker inspect -f '{{.State.Running}}' app) != true ]]; then
+              echo "::error::The container exited during startup"
+              docker logs app
+              exit 1
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:5006/healthz >/dev/null || { docker logs app; exit 1; }
+
+      - name: Check the UI and the fork's routes
+        run: |
+          # The React build made it into the image.
+          curl -fsSL http://localhost:5006/login | grep -q 'id="root"' \
+            || { echo "::error::/login is not serving the React app"; exit 1; }
+          # Fork-only API routes exist (401 signed out, not 404).
+          for path in /api/settings/prompts /api/history/bulk-mela-download; do
+            method=GET; [[ $path == *bulk* ]] && method=POST
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X "$method" "http://localhost:5006$path")
+            echo "$method $path -> $code"
+            [[ $code == 401 ]] || { echo "::error::$path returned $code, expected 401"; exit 1; }
+          done
+
+      - name: Container log
+        if: always()
+        run: docker logs app 2>&1 | tail -50 || true
+
+      # Rebuilds from the cache the Build step just filled, so this only
+      # uploads the layers that were already tested.
+      - name: Push
         uses: docker/build-push-action@v6
         with:
           context: .

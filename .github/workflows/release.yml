@@ -53,11 +53,14 @@ jobs:
     runs-on: ubuntu-latest
     # CI also runs on pull requests, and fails as often as it passes; only a
     # green run on a push to main is worth releasing.
+    # Upstream's own publishing (their releases and tags). A fork
+    # publishes through docker-build.yml instead, so skip it everywhere else.
     if: >-
+      github.repository == 'pickeld/pick-a-recipe' && (
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main')
+       github.event.workflow_run.head_branch == 'main'))
     steps:
       - uses: actions/checkout@v4
         with:

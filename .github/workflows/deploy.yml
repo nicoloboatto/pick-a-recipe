@@ -57,6 +57,9 @@ env:
 jobs:
   build:
     name: Build image (${{ matrix.arch }})
+    # Upstream's own publishing (their Docker Hub, servers, signing keys). A fork
+    # publishes through docker-build.yml instead, so skip it everywhere else.
+    if: github.repository == 'pickeld/pick-a-recipe'
     # This used to build amd64 alone, because emulating arm64 under QEMU took
     # 15-30 minutes. Every push to main then replaced :latest with an
     # amd64-only image, and anyone pulling on a Raspberry Pi or another arm64
@@ -123,6 +126,7 @@ jobs:
     name: Publish multi-arch image
     runs-on: ubuntu-latest
     needs: build
+    if: github.repository == 'pickeld/pick-a-recipe'
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -183,6 +187,7 @@ jobs:
     # jq against the Portainer API, so this needs no Docker and no toolchain.
     runs-on: [self-hosted]
     needs: publish
+    if: github.repository == 'pickeld/pick-a-recipe'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
