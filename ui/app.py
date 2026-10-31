@@ -2283,6 +2283,17 @@ def api_post_config():
     if not filtered:
         return jsonify({'error': 'No valid configuration keys provided'}), 400
     current = load_config()
+    # Same rule as the settings form: the unedited default is not an override,
+    # or saving any other setting would freeze today's prompt text.
+    from helpers import DEFAULT_STRUCTURING_GUIDANCE
+    from transcriber import DEFAULT_VISION_GUIDANCE
+    for key, default_text in (
+        ('custom_structuring_prompt', DEFAULT_STRUCTURING_GUIDANCE),
+        ('custom_vision_prompt', DEFAULT_VISION_GUIDANCE),
+    ):
+        if key in filtered:
+            submitted = str(filtered[key] or '').strip()
+            filtered[key] = submitted if submitted != default_text.strip() else ''
     if 'ai_providers' in filtered:
         # Normalise before storing: a malformed registry would otherwise only
         # surface much later, as an extraction that cannot find its provider.
@@ -2362,6 +2373,26 @@ def import_settings():
         'status': 'success',
         'message': f'Imported {len(filtered_settings)} settings',
         'imported_keys': list(filtered_settings.keys())
+    })
+
+
+@app.route('/api/settings/prompts', methods=['GET'])
+@api_admin_required
+def get_prompt_defaults():
+    """The in-code default guidance and the fixed, non-editable suffix for each
+    editable prompt, so Settings can show what an empty override falls back to."""
+    from helpers import DEFAULT_STRUCTURING_GUIDANCE, get_structuring_fixed_suffix
+    from transcriber import DEFAULT_VISION_GUIDANCE, get_visual_text_fixed_suffix
+
+    return jsonify({
+        'structuring': {
+            'default_text': DEFAULT_STRUCTURING_GUIDANCE.strip(),
+            'fixed_suffix': get_structuring_fixed_suffix(),
+        },
+        'vision': {
+            'default_text': DEFAULT_VISION_GUIDANCE.strip(),
+            'fixed_suffix': get_visual_text_fixed_suffix(),
+        },
     })
 
 

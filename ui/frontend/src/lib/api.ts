@@ -286,6 +286,17 @@ export const api = {
       json: patch,
     }),
 
+  promptDefaults: () =>
+    request<Record<'structuring' | 'vision', { default_text: string; fixed_suffix: string }>>(
+      '/api/settings/prompts',
+    ),
+
+  resetPrompt: (prompt: 'structuring' | 'vision') =>
+    request<{ status: string; default_text: string }>('/api/settings/reset-prompt', {
+      method: 'POST',
+      json: { prompt },
+    }),
+
   exportSettings: () =>
     request<import('@/types').SettingsExport>('/api/settings/export'),
 

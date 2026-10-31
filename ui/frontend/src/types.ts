@@ -330,6 +330,12 @@ export interface AppConfig {
   yt_dlp_cookies_file: string
   yt_dlp_cookies_browser: string
   max_concurrent_jobs: string
+  mela_enabled: string
+  mela_output_dir: string
+  follow_recipe_links: string
+  /** Empty means the in-code default guidance is used. */
+  custom_structuring_prompt: string
+  custom_vision_prompt: string
   [key: string]: string
 }
 

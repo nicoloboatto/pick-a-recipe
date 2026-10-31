@@ -24,6 +24,7 @@ import { AccountCard } from '@/components/settings/account-card'
 import { NotificationsCard } from '@/components/settings/notifications-card'
 import { UsersCard } from '@/components/settings/users-card'
 import { AiProvidersCard } from '@/components/settings/ai-providers-card'
+import { PromptsCard } from '@/components/settings/prompts-card'
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -248,6 +249,9 @@ export function SettingsPage() {
   const transcriptionMode = get('transcription_mode') || 'local'
   const mealieEnabled = get('mealie_enabled') === 'true'
   const tandoorEnabled = get('tandoor_enabled') === 'true'
+  const melaEnabled = get('mela_enabled') === 'true'
+  // Default on, like the server: only an explicit 'false' means off.
+  const followRecipeLinks = get('follow_recipe_links') !== 'false'
   const confirmBeforeUpload = get('confirm_before_upload') === 'true'
   // Default on: the lookup needs no key, so only an explicit 'false' means off.
   const nutritionLookupEnabled = get('nutrition_lookup_enabled') !== 'false'
@@ -298,7 +302,7 @@ export function SettingsPage() {
             so it needs a model that can see images.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
           <Field label="Provider">
             <ProviderPicker
               providers={providerRows}
@@ -306,8 +310,26 @@ export function SettingsPage() {
               onChange={v => set('ai_extraction_provider', v)}
             />
           </Field>
+          <div className="flex items-center gap-3">
+            <Switch
+              id="follow_recipe_links"
+              checked={followRecipeLinks}
+              onCheckedChange={checked =>
+                set('follow_recipe_links', checked ? 'true' : 'false')
+              }
+            />
+            <div>
+              <Label htmlFor="follow_recipe_links">Follow recipe links found in captions</Label>
+              <FieldHint>
+                When a post links to a recipe page, read it and treat its written
+                recipe as the most reliable source.
+              </FieldHint>
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      <PromptsCard get={get} set={set} />
 
       {/* Nutrition */}
       <Card>
@@ -399,7 +421,7 @@ export function SettingsPage() {
             Recipe Export
           </CardTitle>
           <CardDescription>
-            Where finished recipes get uploaded. Enable both to send every recipe to both managers.
+            Where finished recipes go. Every enabled target gets every recipe.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -481,11 +503,44 @@ export function SettingsPage() {
                 </Field>
               </CardContent>
             </Card>
+
+            {/* Mela */}
+            <Card className={melaEnabled ? '' : 'opacity-60'}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">Mela</CardTitle>
+                  <Switch
+                    checked={melaEnabled}
+                    onCheckedChange={checked =>
+                      set('mela_enabled', checked ? 'true' : 'false')
+                    }
+                    aria-label="Enable Mela export"
+                  />
+                </div>
+                <CardDescription className="text-xs">
+                  {melaEnabled ? 'Enabled' : 'Disabled'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <Field
+                  label="Output directory"
+                  hint="Mela has no server: each recipe is written as a .melarecipe file you can download from Tasks."
+                >
+                  <Input
+                    type="text"
+                    placeholder="data/mela_exports"
+                    autoComplete="off"
+                    value={get('mela_output_dir')}
+                    onChange={e => set('mela_output_dir', e.target.value)}
+                  />
+                </Field>
+              </CardContent>
+            </Card>
           </div>
 
-          {!mealieEnabled && !tandoorEnabled && (
+          {!mealieEnabled && !tandoorEnabled && !melaEnabled && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
-              <strong>No recipe manager is enabled.</strong> Recipes will not be uploaded anywhere until you enable Mealie or Tandoor.
+              <strong>No recipe manager is enabled.</strong> Recipes will not be saved anywhere until you enable Mealie, Tandoor, or Mela.
             </div>
           )}
 

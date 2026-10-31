@@ -4,6 +4,7 @@
 
 ### New Features (frontend)
 
+- **Prompts, Mela and Recipe Links in the React Settings Page**: `/settings` now serves the React app, so the editable prompts (with their read-only fixed suffix and "Reset to default"), the Mela export card (toggle and output directory) and the "Follow recipe links found in captions" switch move there. The "no recipe manager enabled" warning now counts Mela.
 - **Re-run Structuring & Mela Download in the React Tasks Page**: Wires the backend endpoints from earlier commits into the actual UI. A "Re-run Structuring" button appears both on a live pending-approval row (regenerates the draft in place) and in a completed recipe's detail modal (once dish_dir cache material exists), regenerating just the structured recipe without re-downloading or re-transcribing. Completed Mela recipes get a "Download .melarecipe" action (row dropdown menu and detail modal), and multi-selecting several Mela recipes in the task list surfaces a bulk-download button that merges them into one `.melarecipes` archive. `RecipeView` also now renders ingredient `group` headings (MARINADE, SAUCE, ...) instead of a flat list, matching how Tandoor/Mealie/Mela already render them. Also fixes a bug where a Mela-only setup's confirm-before-upload preview showed "no target" instead of "Mela" as the destination.
 
 ### Improvements
