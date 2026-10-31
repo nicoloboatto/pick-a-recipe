@@ -890,7 +890,7 @@ def _authenticate_password(username: str, password: str) -> dict:
     # Cost parameters may have risen since this hash was stored; the password is
     # in hand exactly once, so this is the only chance to upgrade it.
     if passwords.needs_rehash(user['password_hash']):
-        set_user_password(user['username'], passwords.hash_password(password))
+        set_user_password(user['username'], passwords.rehash(password))
     return user
 
 

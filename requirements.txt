@@ -13,6 +13,8 @@ google-genai
 authlib
 PyJWT
 argon2-cffi
+# Verifies passwords stored by older builds; upgraded to Argon2id on sign-in.
+bcrypt
 beautifulsoup4
 # Web Push for job-outcome notifications. Brings py-vapid and cryptography,
 # which ui/push.py also uses to mint the VAPID key pair.

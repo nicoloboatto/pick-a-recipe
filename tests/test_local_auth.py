@@ -629,3 +629,46 @@ class TestAuthStatus(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestLegacyHashes(unittest.TestCase):
+    """Hashes written by this fork's earlier local login (bcrypt, and before it
+    unsalted SHA-256) keep working, and are replaced on first sign-in."""
+
+    def test_bcrypt_and_sha256_verify_and_count_as_outdated(self):
+        import bcrypt
+        import hashlib
+
+        legacy = [
+            bcrypt.hashpw(b'admin123', bcrypt.gensalt()).decode(),
+            hashlib.sha256(b'admin123').hexdigest(),
+        ]
+        for stored in legacy:
+            self.assertTrue(passwords.verify(stored, 'admin123'))
+            self.assertFalse(passwords.verify(stored, 'admin1234'))
+            self.assertTrue(passwords.needs_rehash(stored))
+
+    @classmethod
+    def setUpClass(cls):
+        # A short password the old build allowed: the upgrade must not trip
+        # the length policy that now applies to new passwords.
+        cls.res = _run_local("""
+            import bcrypt
+            old = bcrypt.hashpw(b'admin123', bcrypt.gensalt()).decode()
+            database.claim_first_local_admin('admin', old)
+
+            status = app.test_client().post('/auth/local/login', json={
+                'username': 'admin', 'password': 'admin123',
+            }).status_code
+            stored = database.get_user('admin')['password_hash']
+            emit(
+                status=status,
+                upgraded=stored.startswith('$argon2id$'),
+                still_verifies=passwords.verify(stored, 'admin123'),
+            )
+        """)
+
+    def test_login_with_a_bcrypt_hash_upgrades_it(self):
+        self.assertEqual(self.res['status'], 200)
+        self.assertTrue(self.res['upgraded'])
+        self.assertTrue(self.res['still_verifies'])

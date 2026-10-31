@@ -8,6 +8,7 @@
 
 ### Improvements
 
+- **Older Local Passwords Keep Working**: Accounts created by this fork's earlier local login (bcrypt, or the unsalted SHA-256 before it) still sign in under upstream's Argon2id accounts, and the stored hash is upgraded on that first sign-in, so an existing `data/` folder needs no password reset.
 - **Grouped, Raw-State Ingredients**: The structuring prompt now requires ingredients in their raw, pre-instruction state (no "roasted pumpkin puree" when a step roasts and purees raw pumpkin) and decomposes generic prepared components (a bechamel, a marinade, a dough) into their own base ingredients. Added a `group` field to the ingredient schema so multi-component recipes (marinade + sauce + coating, filling + bechamel, etc.) get labeled sections (`MARINADE`, `SAUCE`, ...) instead of one flat list, and the same ingredient name used in two components (e.g. salt) no longer incorrectly merges into a single line. Tandoor (`is_header` rows) and Mealie (inline `title` headers) both render the groups natively. The linked-recipe-page priority language was also sharpened: when present, it now explicitly outranks the caption and on-screen text, not just the spoken transcript.
 
 ### New Features

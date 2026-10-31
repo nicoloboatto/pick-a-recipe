@@ -4,8 +4,16 @@ Argon2id, via argon2-cffi. Parameters are the library's defaults, which track
 the RFC 9106 guidance; they are recorded inside each hash, so raising them
 later does not invalidate existing passwords. Verification detects an outdated
 hash and callers re-store it (see needs_rehash).
+
+Hashes written by this fork's earlier local-login code - bcrypt, and before
+that unsalted SHA-256 - still verify, and count as outdated so the first
+successful sign-in replaces them with Argon2id.
 """
 
+import hashlib
+import hmac
+
+import bcrypt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError, VerificationError
 
@@ -47,6 +55,24 @@ def hash_password(password: str) -> str:
     return _hasher.hash(password)
 
 
+def _is_bcrypt(stored_hash: str) -> bool:
+    return stored_hash.startswith(('$2a$', '$2b$', '$2y$'))
+
+
+def _is_legacy_sha256(stored_hash: str) -> bool:
+    return len(stored_hash) == 64 and all(c in '0123456789abcdef' for c in stored_hash)
+
+
+def _verify_legacy(stored_hash: str, password: str) -> bool:
+    if _is_bcrypt(stored_hash):
+        try:
+            return bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
+        except ValueError:
+            return False
+    digest = hashlib.sha256(password.encode('utf-8')).hexdigest()
+    return hmac.compare_digest(digest, stored_hash)
+
+
 def verify(stored_hash: str | None, password: str) -> bool:
     """Check a password against a stored hash, in constant time.
 
@@ -56,6 +82,8 @@ def verify(stored_hash: str | None, password: str) -> bool:
     """
     if not stored_hash or not isinstance(password, str) or not password:
         return False
+    if _is_bcrypt(stored_hash) or _is_legacy_sha256(stored_hash):
+        return _verify_legacy(stored_hash, password)
     try:
         return _hasher.verify(stored_hash, password)
     except (VerifyMismatchError, VerificationError, InvalidHashError):
@@ -63,11 +91,22 @@ def verify(stored_hash: str | None, password: str) -> bool:
 
 
 def needs_rehash(stored_hash: str) -> bool:
-    """True when a hash predates the current cost parameters."""
+    """True when a hash predates the current cost parameters, or the scheme."""
+    if _is_bcrypt(stored_hash) or _is_legacy_sha256(stored_hash):
+        return True
     try:
         return _hasher.check_needs_rehash(stored_hash)
     except (InvalidHashError, VerificationError):
         return False
+
+
+def rehash(password: str) -> str:
+    """Hash a password that has just verified, to replace an outdated hash.
+
+    Skips the length policy on purpose: the password was accepted when it was
+    set, and refusing to upgrade it would fail the sign-in it just passed.
+    """
+    return _hasher.hash(password)
 
 
 def dummy_verify() -> None:
