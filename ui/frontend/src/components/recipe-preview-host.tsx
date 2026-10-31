@@ -28,6 +28,10 @@ interface PreviewState {
 /**
  * The "show a preview first" dialog. It used to live only on the home page,
  * so a recipe that finished while you were on Tasks or a job never appeared.
+ *
+ * It never opens by itself: popping up mid-task interrupted whatever was on
+ * screen, including a different recipe already being reviewed. A new recipe
+ * gets a toast with a Review action; the sidebar badge and Tasks list stay.
  */
 export function RecipePreviewHost() {
   const queryClient = useQueryClient()
@@ -42,24 +46,39 @@ export function RecipePreviewHost() {
   })
 
   const openPreview = useCallback((upload: PendingUpload) => {
-    if (!upload.upload_id || !upload.recipe || shown.current.has(upload.upload_id)) return
-    shown.current.add(upload.upload_id)
+    if (!upload.upload_id || !upload.recipe) return
     setPreview({
       uploadId: upload.upload_id,
       pendingUpload: upload,
       selectedImageIndex: upload.best_image_index ?? 0,
       recipe: structuredClone(upload.recipe),
     })
-    toast.info(
-      `Recipe "${upload.recipe.name || 'Untitled'}" is waiting for your confirmation!`,
-    )
   }, [])
 
+  const announce = useCallback(
+    (upload: PendingUpload) => {
+      if (!upload.upload_id || shown.current.has(upload.upload_id)) return
+      shown.current.add(upload.upload_id)
+      if (!upload.recipe) return
+      toast.info(
+        `Recipe "${upload.recipe.name || 'Untitled'}" is waiting for your confirmation`,
+        {
+          id: `preview-ready-${upload.upload_id}`,
+          action: { label: 'Review', onClick: () => openPreview(upload) },
+        },
+      )
+    },
+    [openPreview],
+  )
+
   useEffect(() => {
-    if (preview) return
-    const next = pickUnseenPreview(data?.pending_uploads ?? [], shown.current)
-    if (next) openPreview(next)
-  }, [data, preview, openPreview])
+    // announce() marks each one shown, so this walks every unseen upload once.
+    for (;;) {
+      const next = pickUnseenPreview(data?.pending_uploads ?? [], shown.current)
+      if (!next) break
+      announce(next)
+    }
+  }, [data, announce])
 
   useSocketEvent(
     'recipe_preview',
@@ -74,7 +93,7 @@ export function RecipePreviewHost() {
         output_target: string
       }) => {
         if (!payload.upload_id) return
-        openPreview({
+        announce({
           upload_id: payload.upload_id,
           job_id: payload.job_id,
           recipe: payload.recipe,
@@ -87,7 +106,7 @@ export function RecipePreviewHost() {
         void queryClient.invalidateQueries({ queryKey: ['pending-uploads'] })
         void queryClient.invalidateQueries({ queryKey: ['jobs'] })
       },
-      [openPreview, queryClient],
+      [announce, queryClient],
     ),
   )
 
