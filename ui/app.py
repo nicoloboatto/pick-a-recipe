@@ -1802,6 +1802,7 @@ def process_video_job(job_id, jm):
             target_label=preview_target_label(),
             emit_preview=emit_preview,
             open_approval_fn=lambda **kw: jm.open_approval(**kw),
+            is_cancelled=lambda: jm.is_cancelled(job_id),
         )
 
     result = run_url_pipeline(job['url'], reporter, stats=stats, preview=preview)
