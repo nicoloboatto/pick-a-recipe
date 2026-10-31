@@ -149,8 +149,9 @@ class JobManager:
         return rooms
 
     def _emit_to_rooms(self, event: str, payload: dict, job_id: str) -> None:
-        for room in self._rooms(job_id):
-            self.socketio.emit(event, payload, room=room)
+        # One emit over the list, not one per room: a client watching its own
+        # job sits in both rooms and would otherwise get every event twice.
+        self.socketio.emit(event, payload, room=self._rooms(job_id))
 
     # ===== state machine =====
 

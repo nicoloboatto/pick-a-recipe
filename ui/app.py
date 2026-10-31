@@ -2749,8 +2749,8 @@ def _emit_preview_payload(payload: dict) -> None:
     owner = payload.get('owner')
     if owner:
         rooms.append(f'user_{owner}')
-    for room in rooms:
-        socketio.emit('recipe_preview', payload, room=room)
+    # A single emit over both rooms reaches a client in both only once.
+    socketio.emit('recipe_preview', payload, room=rooms)
 
 
 def _display_target(raw: str | None) -> str:
